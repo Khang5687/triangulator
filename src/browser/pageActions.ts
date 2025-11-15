@@ -879,7 +879,7 @@ function buildResponseObserverExpression(timeoutMs: number): string {
         });
         observer.observe(document.body, { childList: true, subtree: true, characterData: true });
         stopInterval = setInterval(() => {
-          const stop = document.querySelector('${STOP_BUTTON_SELECTOR}');
+          const stop = document.querySelector(STOP_SELECTOR);
           if (!stop) {
             return;
           }
