@@ -30,7 +30,7 @@ OPENAI_API_KEY=sk-... npx @steipete/oracle -p "Summarize the risk register" --fi
 npx @steipete/oracle --engine browser -p "Summarize the risk register" --file docs/risk-register.md docs/risk-matrix.md
 
 # Globs/exclusions
-npx @steipete/oracle -- -p "Review the TS data layer" --file "src/**/*.ts" --file "!src/**/*.test.ts"
+npx @steipete/oracle -p "Review the TS data layer" --file "src/**/*.ts" --file "!src/**/*.test.ts"
 ```
 
 ## How do I integrate this?
