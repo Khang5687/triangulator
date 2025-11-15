@@ -36,6 +36,8 @@ import type { ShowStatusOptions } from '../src/cli/sessionDisplay.js';
 import { handleSessionCommand, type StatusOptions, formatSessionCleanupMessage } from '../src/cli/sessionCommand.js';
 import { isErrorLogged } from '../src/cli/errorUtils.js';
 import { handleStatusFlag } from '../src/cli/rootAlias.js';
+import { getCliVersion } from '../src/version.js';
+import { runDryRunSummary } from '../src/cli/dryRun.js';
 
 type EngineMode = 'api' | 'browser';
 
@@ -74,17 +76,32 @@ interface CliOptions extends OptionValues {
   debugHelp?: boolean;
   heartbeat?: number;
   status?: boolean;
+  dryRun?: boolean;
 }
 
 type ResolvedCliOptions = Omit<CliOptions, 'model'> & { model: ModelName };
 
-const VERSION = '1.0.0';
+const VERSION = getCliVersion();
 const CLI_ENTRYPOINT = fileURLToPath(import.meta.url);
 const rawCliArgs = process.argv.slice(2);
 const isTty = process.stdout.isTTY;
 
 const program = new Command();
 applyHelpStyling(program, VERSION, isTty);
+program.hook('preAction', (thisCommand) => {
+  if (thisCommand !== program) {
+    return;
+  }
+  if (rawCliArgs.some((arg) => arg === '--help' || arg === '-h')) {
+    return;
+  }
+  const opts = thisCommand.optsWithGlobals() as CliOptions;
+  const bypassPrompt = Boolean(opts.session || opts.execSession || opts.status || opts.debugHelp);
+  const requiresPrompt = opts.renderMarkdown || Boolean(opts.preview) || Boolean(opts.dryRun) || !bypassPrompt;
+  if (requiresPrompt && !opts.prompt) {
+    throw new Error('Prompt is required. Provide it via --prompt "<text>".');
+  }
+});
 program
   .name('oracle')
   .description('One-shot GPT-5 Pro / GPT-5.1 tool for hard questions that benefit from large file context and server-side search.')
@@ -106,6 +123,7 @@ program
   .addOption(new Option('-e, --engine <mode>', 'Execution engine (api | browser).').choices(['api', 'browser']).default('api'))
   .option('--files-report', 'Show token usage per attached file (also prints automatically when files exceed the token budget).', false)
   .option('-v, --verbose', 'Enable verbose logging for all operations.', false)
+  .option('--dry-run', 'Validate inputs and show token estimates without calling the model.', false)
   .addOption(
     new Option('--preview [mode]', 'Preview the request without calling the API (summary | json | full).')
       .choices(['summary', 'json', 'full'])
@@ -306,6 +324,12 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     printDebugHelp(program.name());
     return;
   }
+  if (options.dryRun && previewMode) {
+    throw new Error('--dry-run cannot be combined with --preview.');
+  }
+  if (options.dryRun && options.renderMarkdown) {
+    throw new Error('--dry-run cannot be combined with --render-markdown.');
+  }
 
   let engine: EngineMode = options.engine ?? 'api';
   if (options.browser) {
@@ -358,6 +382,21 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     throw new Error('Prompt is required when starting a new session.');
   }
 
+  if (options.dryRun) {
+    const baseRunOptions = buildRunOptions(resolvedOptions, { preview: false, previewMode: undefined });
+    await runDryRunSummary(
+      {
+        engine,
+        runOptions: baseRunOptions,
+        cwd: process.cwd(),
+        version: VERSION,
+        log: console.log,
+      },
+      {},
+    );
+    return;
+  }
+
   if (options.file && options.file.length > 0) {
     await readFiles(options.file, { cwd: process.cwd() });
   }
@@ -388,11 +427,14 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   console.log(chalk.bold(`Reattach later with: ${chalk.cyan(reattachCommand)}`));
   console.log('');
   const liveRunOptions: RunOracleOptions = { ...baseRunOptions, sessionId: sessionMeta.id };
-  const detached = await launchDetachedSession(sessionMeta.id).catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.log(chalk.yellow(`Unable to detach session runner (${message}). Running inline...`));
-    return false;
-  });
+  const disableDetach = process.env.ORACLE_NO_DETACH === '1';
+  const detached = disableDetach
+    ? false
+    : await launchDetachedSession(sessionMeta.id).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(chalk.yellow(`Unable to detach session runner (${message}). Running inline...`));
+      return false;
+    });
   if (detached === false) {
     await runInteractiveSession(sessionMeta, liveRunOptions, sessionMode, browserConfig, true);
     console.log(chalk.bold(`Session ${sessionMeta.id} completed`));

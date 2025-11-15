@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type { RunOracleOptions } from '../../src/oracle.js';
 import type { BrowserSessionConfig } from '../../src/sessionManager.js';
 import { runBrowserSessionExecution } from '../../src/browser/sessionRunner.js';
+import { getCliVersion } from '../../src/version.js';
 
 const baseRunOptions: RunOracleOptions = {
   prompt: 'Hello world',
@@ -11,6 +12,7 @@ const baseRunOptions: RunOracleOptions = {
 };
 
 const baseConfig: BrowserSessionConfig = {};
+const cliVersion = getCliVersion();
 
 describe('runBrowserSessionExecution', () => {
   test('logs stats and returns usage/runtime', async () => {
@@ -21,7 +23,7 @@ describe('runBrowserSessionExecution', () => {
         browserConfig: baseConfig,
         cwd: '/repo',
         log,
-        cliVersion: '1.0.0',
+        cliVersion,
       },
       {
         assemblePrompt: async () => ({
@@ -29,6 +31,8 @@ describe('runBrowserSessionExecution', () => {
           composerText: 'prompt',
           estimatedInputTokens: 42,
           attachments: [],
+          inlineFileCount: 0,
+          tokenEstimateIncludesInlineFiles: false,
         }),
         executeBrowser: async () => ({
           answerText: 'ok',
@@ -52,14 +56,16 @@ describe('runBrowserSessionExecution', () => {
         browserConfig: { keepBrowser: true },
         cwd: '/repo',
         log,
-        cliVersion: '1.0.0',
+        cliVersion,
       },
       {
         assemblePrompt: async () => ({
           markdown: 'prompt',
           composerText: 'prompt',
           estimatedInputTokens: 1,
-          attachments: [{ path: '/repo/a.txt', displayPath: 'a.txt' }],
+          attachments: [{ path: '/repo/a.txt', displayPath: 'a.txt', sizeBytes: 1024 }],
+          inlineFileCount: 0,
+          tokenEstimateIncludesInlineFiles: false,
         }),
         executeBrowser: async () => ({
           answerText: 'text',
@@ -88,7 +94,7 @@ describe('runBrowserSessionExecution', () => {
         browserConfig: baseConfig,
         cwd: '/repo',
         log,
-        cliVersion: '1.0.0',
+        cliVersion,
       },
       {
         assemblePrompt: async () => ({
@@ -96,6 +102,8 @@ describe('runBrowserSessionExecution', () => {
           composerText: 'prompt',
           estimatedInputTokens: 5,
           attachments: [],
+          inlineFileCount: 0,
+          tokenEstimateIncludesInlineFiles: false,
         }),
         executeBrowser,
       },

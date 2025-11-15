@@ -32,6 +32,7 @@ export type BrowserLogger = ((message: string) => void) & {
 export interface BrowserAttachment {
   path: string;
   displayPath: string;
+  sizeBytes?: number;
 }
 
 export interface BrowserAutomationConfig {

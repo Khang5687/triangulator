@@ -28,7 +28,9 @@ if (!ENABLE_LIVE || !LIVE_API_KEY) {
           },
           sharedDeps,
         );
-        expect(result.mode).toBe('live');
+        if (result.mode !== 'live') {
+          throw new Error('Expected live result');
+        }
         const text = extractTextOutput(result.response);
         expect(text.toLowerCase()).toContain('live pro smoke test');
         expect(result.response.status ?? 'completed').toBe('completed');
@@ -49,7 +51,9 @@ if (!ENABLE_LIVE || !LIVE_API_KEY) {
           },
           sharedDeps,
         );
-        expect(result.mode).toBe('live');
+        if (result.mode !== 'live') {
+          throw new Error('Expected live result');
+        }
         const text = extractTextOutput(result.response);
         expect(text.toLowerCase()).toContain('live base smoke test');
         expect(result.response.status ?? 'completed').toBe('completed');

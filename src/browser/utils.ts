@@ -56,3 +56,16 @@ export async function withRetries<T>(task: () => Promise<T>, options: RetryOptio
   }
   throw new Error('withRetries exhausted without result');
 }
+
+export function formatBytes(size: number): string {
+  if (!Number.isFinite(size) || size < 0) {
+    return 'n/a';
+  }
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}

@@ -24,10 +24,11 @@ vi.mock('../../src/sessionManager.ts', async () => {
 
 import type { SessionMetadata } from '../../src/sessionManager.ts';
 import { performSessionRun } from '../../src/cli/sessionRunner.ts';
-import { FileValidationError, OracleResponseError, OracleTransportError, runOracle } from '../../src/oracle.ts';
+import { BrowserAutomationError, FileValidationError, OracleResponseError, OracleTransportError, runOracle } from '../../src/oracle.ts';
 import type { OracleResponse, RunOracleResult } from '../../src/oracle.ts';
 import { runBrowserSessionExecution } from '../../src/browser/sessionRunner.ts';
 import { updateSessionMetadata } from '../../src/sessionManager.ts';
+import { getCliVersion } from '../../src/version.ts';
 
 const baseSessionMeta: SessionMetadata = {
   id: 'sess-1',
@@ -43,6 +44,7 @@ const baseRunOptions = {
 
 const log = vi.fn();
 const write = vi.fn(() => true);
+const cliVersion = getCliVersion();
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -65,7 +67,7 @@ describe('performSessionRun', () => {
       cwd: '/tmp',
       log,
       write,
-      version: '1.0.0',
+      version: cliVersion,
     });
 
     expect(vi.mocked(updateSessionMetadata)).toHaveBeenCalledTimes(2);
@@ -93,7 +95,7 @@ describe('performSessionRun', () => {
       cwd: '/tmp',
       log,
       write,
-      version: '1.0.0',
+      version: cliVersion,
     });
 
     expect(vi.mocked(runBrowserSessionExecution)).toHaveBeenCalled();
@@ -101,6 +103,31 @@ describe('performSessionRun', () => {
     expect(finalUpdate).toMatchObject({
       status: 'completed',
       browser: expect.objectContaining({ runtime: expect.objectContaining({ chromePid: 123 }) }),
+    });
+  });
+
+  test('records metadata when browser automation fails', async () => {
+    const automationError = new BrowserAutomationError('automation failed', { stage: 'execute-browser' });
+    vi.mocked(runBrowserSessionExecution).mockRejectedValueOnce(automationError);
+
+    await expect(
+      performSessionRun({
+        sessionMeta: baseSessionMeta,
+        runOptions: baseRunOptions,
+        mode: 'browser',
+        browserConfig: { chromePath: null },
+        cwd: '/tmp',
+        log,
+        write,
+        version: cliVersion,
+      }),
+    ).rejects.toThrow('automation failed');
+
+    const finalUpdate = vi.mocked(updateSessionMetadata).mock.calls.at(-1)?.[1];
+    expect(finalUpdate).toMatchObject({
+      status: 'error',
+      errorMessage: 'automation failed',
+      browser: expect.objectContaining({ config: expect.any(Object) }),
     });
   });
 
@@ -116,7 +143,7 @@ describe('performSessionRun', () => {
         cwd: '/tmp',
         log,
         write,
-        version: '1.0.0',
+      version: cliVersion,
       }),
     ).rejects.toThrow('boom');
 
@@ -138,7 +165,7 @@ describe('performSessionRun', () => {
         cwd: '/tmp',
         log,
         write,
-        version: '1.0.0',
+      version: cliVersion,
       }),
     ).rejects.toThrow('timeout');
 
@@ -161,7 +188,7 @@ describe('performSessionRun', () => {
         cwd: '/tmp',
         log,
         write,
-        version: '1.0.0',
+      version: cliVersion,
       }),
     ).rejects.toThrow('too large');
 

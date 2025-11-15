@@ -33,6 +33,8 @@ describe('assembleBrowserPrompt', () => {
     expect(result.attachments).toEqual([
       expect.objectContaining({ path: '/repo/a.txt', displayPath: 'a.txt' }),
     ]);
+    expect(result.inlineFileCount).toBe(0);
+    expect(result.tokenEstimateIncludesInlineFiles).toBe(false);
   });
 
   test('respects custom cwd and multiple files', async () => {
@@ -64,5 +66,19 @@ describe('assembleBrowserPrompt', () => {
     expect(result.composerText).not.toContain('[SYSTEM]');
     expect(result.composerText).not.toContain('[USER]');
     expect(result.attachments).toEqual([]);
+    expect(result.inlineFileCount).toBe(1);
+    expect(result.tokenEstimateIncludesInlineFiles).toBe(true);
+  });
+
+  test('inline file mode increases token estimates', async () => {
+    const baseOptions = buildOptions({ file: ['doc.md'] });
+    const readFilesImpl = async () => [{ path: '/repo/doc.md', content: 'hello world' }];
+    const base = await assembleBrowserPrompt(baseOptions, { cwd: '/repo', readFilesImpl });
+    const inline = await assembleBrowserPrompt(
+      { ...baseOptions, browserInlineFiles: true } as RunOracleOptions,
+      { cwd: '/repo', readFilesImpl },
+    );
+    expect(inline.estimatedInputTokens).toBeGreaterThanOrEqual(base.estimatedInputTokens);
+    expect(inline.tokenEstimateIncludesInlineFiles).toBe(true);
   });
 });

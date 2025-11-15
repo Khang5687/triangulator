@@ -4,13 +4,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { performance } from 'node:perf_hooks';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
 import { APIConnectionError, APIConnectionTimeoutError } from 'openai';
 import type {
   ClientLike,
-  MinimalFsModule,
   OracleResponse,
   OracleRequestBody,
   PreviewMode,
@@ -33,10 +29,8 @@ import {
 } from './errors.js';
 import { createDefaultClientFactory } from './client.js';
 import { startHeartbeat } from '../heartbeat.js';
-
-const pkgPath = resolvePackageJsonPath(import.meta.url);
-const require = createRequire(import.meta.url);
-const pkg = require(pkgPath);
+import { getCliVersion } from '../version.js';
+import { createFsAdapter } from './fsAdapter.js';
 const isTty = process.stdout.isTTY;
 const dim = (text: string): string => (isTty ? kleur.dim(text) : text);
 const BACKGROUND_MAX_WAIT_MS = 30 * 60 * 1000;
@@ -53,7 +47,7 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
   const {
     apiKey = options.apiKey ?? process.env.OPENAI_API_KEY,
     cwd = process.cwd(),
-    fs: fsModule = fs as unknown as MinimalFsModule,
+    fs: fsModule = createFsAdapter(fs),
     log = console.log,
     write = (text: string) => process.stdout.write(text),
     now = () => performance.now(),
@@ -118,7 +112,8 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
   const estimatedInputTokens = modelConfig.tokenizer(tokenizerInput, TOKENIZER_OPTIONS);
   logVerbose(`Estimated tokens (prompt + files): ${estimatedInputTokens.toLocaleString()}`);
   const fileCount = files.length;
-  const headerLine = `Oracle (${pkg.version}) consulting ${modelConfig.model}'s crystal ball with ${estimatedInputTokens.toLocaleString()} tokens and ${fileCount} files...`;
+  const cliVersion = getCliVersion();
+  const headerLine = `Oracle (${cliVersion}) consulting ${modelConfig.model}'s crystal ball with ${estimatedInputTokens.toLocaleString()} tokens and ${fileCount} files...`;
   const shouldReportFiles =
     (options.filesReport || fileTokenInfo.totalTokens > inputTokenBudget) && fileTokenInfo.stats.length > 0;
   if (!isPreview) {
@@ -265,6 +260,7 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
 
   const answerText = extractTextOutput(response);
   if (!options.silent) {
+    // biome-ignore lint/nursery/noUnnecessaryConditions: flips true when streaming events arrive
     if (sawTextDelta) {
       write('\n\n');
     } else {
@@ -430,8 +426,10 @@ async function pollBackgroundResponse(params: BackgroundPollParams): Promise<Ora
   let response = initialResponse;
   let firstCycle = true;
   let lastStatus: string | undefined = response.status;
+  // biome-ignore lint/nursery/noUnnecessaryConditions: intentional polling loop
   while (true) {
     const status = response.status ?? 'completed';
+    // biome-ignore lint/nursery/noUnnecessaryConditions: guard only for first iteration
     if (firstCycle) {
       firstCycle = false;
       log(dim(`OpenAI background response status=${status}. We'll keep retrying automatically.`));
@@ -487,6 +485,7 @@ async function retrieveBackgroundResponseWithRetry(
 ): Promise<{ response: OracleResponse; reconnected: boolean }> {
   const { client, responseId, wait, now, maxWaitMs, startMark, log } = params;
   let retries = 0;
+  // biome-ignore lint/nursery/noUnnecessaryConditions: intentional retry loop
   while (true) {
     try {
       const next = await client.responses.retrieve(responseId);
@@ -515,21 +514,4 @@ function asRetryableTransportError(error: unknown): OracleTransportError | null 
     return toTransportError(error);
   }
   return null;
-}
-
-function resolvePackageJsonPath(moduleUrl: string): string {
-  const startDir = path.dirname(fileURLToPath(moduleUrl));
-  return resolveFromDir(startDir);
-
-  function resolveFromDir(dir: string): string {
-    const candidate = path.join(dir, 'package.json');
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-    const parentDir = path.dirname(dir);
-    if (parentDir === dir) {
-      throw new Error('Unable to locate package.json from module path.');
-    }
-    return resolveFromDir(parentDir);
-  }
 }

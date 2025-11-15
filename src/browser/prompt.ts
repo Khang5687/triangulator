@@ -7,6 +7,8 @@ export interface BrowserPromptArtifacts {
   composerText: string;
   estimatedInputTokens: number;
   attachments: BrowserAttachment[];
+  inlineFileCount: number;
+  tokenEstimateIncludesInlineFiles: boolean;
 }
 
 interface AssemblePromptDeps {
@@ -38,13 +40,14 @@ export async function assembleBrowserPrompt(
   if (userPrompt) {
     composerSections.push(userPrompt);
   }
+  let inlineBlock = '';
   if (inlineFiles && sections.length > 0) {
     const inlineLines: string[] = [];
     sections.forEach((section) => {
       inlineLines.push(`[FILE: ${section.displayPath}]`, section.content.trimEnd(), '');
     });
-    const inlineBlock = inlineLines.join('\n').trim();
-    if (inlineBlock) {
+    inlineBlock = inlineLines.join('\n').trim();
+    if (inlineBlock.length > 0) {
       composerSections.push(inlineBlock);
     }
   }
@@ -54,14 +57,24 @@ export async function assembleBrowserPrompt(
     : sections.map((section) => ({
         path: section.absolutePath,
         displayPath: section.displayPath,
+        sizeBytes: Buffer.byteLength(section.content, 'utf8'),
       }));
+  const inlineFileCount = inlineFiles ? sections.length : 0;
   const tokenizer = MODEL_CONFIGS[runOptions.model].tokenizer;
+  const tokenizerUserContent =
+    inlineFileCount > 0 && inlineBlock
+      ? [userPrompt, inlineBlock].filter((value) => Boolean(value?.trim())).join('\n\n').trim()
+      : userPrompt;
+  const tokenizerMessages = [
+    systemPrompt ? { role: 'system', content: systemPrompt } : null,
+    tokenizerUserContent ? { role: 'user', content: tokenizerUserContent } : null,
+  ].filter(Boolean) as Array<{ role: 'system' | 'user'; content: string }>;
   const estimatedInputTokens = tokenizer(
-    [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
+    tokenizerMessages.length > 0
+      ? tokenizerMessages
+      : [{ role: 'user', content: '' }],
     TOKENIZER_OPTIONS,
   );
-  return { markdown, composerText, estimatedInputTokens, attachments };
+  const tokenEstimateIncludesInlineFiles = inlineFileCount > 0 && Boolean(inlineBlock);
+  return { markdown, composerText, estimatedInputTokens, attachments, inlineFileCount, tokenEstimateIncludesInlineFiles };
 }

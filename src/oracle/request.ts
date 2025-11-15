@@ -8,6 +8,7 @@ import type {
 } from './types.js';
 import { DEFAULT_SYSTEM_PROMPT } from './config.js';
 import { createFileSections, readFiles } from './files.js';
+import { createFsAdapter } from './fsAdapter.js';
 
 export function buildPrompt(basePrompt: string, files: FileContent[], cwd = process.cwd()): string {
   if (!files.length) {
@@ -54,7 +55,7 @@ export async function renderPromptMarkdown(
   deps: { cwd?: string; fs?: MinimalFsModule } = {},
 ): Promise<string> {
   const cwd = deps.cwd ?? process.cwd();
-  const fsModule = deps.fs ?? (fs as unknown as MinimalFsModule);
+  const fsModule = deps.fs ?? createFsAdapter(fs);
   const files = await readFiles(options.file ?? [], { cwd, fsModule });
   const sections = createFileSections(files, cwd);
   const systemPrompt = options.system?.trim() || DEFAULT_SYSTEM_PROMPT;

@@ -4,7 +4,6 @@ import {
   ASSISTANT_ROLE_SELECTOR,
   CONVERSATION_TURN_SELECTOR,
   COPY_BUTTON_SELECTOR,
-  SEND_BUTTON_SELECTOR,
   STOP_BUTTON_SELECTOR,
 } from '../constants.js';
 import { delay } from '../utils.js';
@@ -528,4 +527,3 @@ interface AssistantSnapshot {
   messageId?: string | null;
   turnId?: string | null;
 }
-
