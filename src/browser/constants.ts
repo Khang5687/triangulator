@@ -21,6 +21,9 @@ export const ANSWER_SELECTORS = [
   '[data-message-author-role="assistant"]',
 ];
 
+export const CONVERSATION_TURN_SELECTOR = 'article[data-testid^="conversation-turn"]';
+export const ASSISTANT_ROLE_SELECTOR = '[data-message-author-role="assistant"]';
+
 export const STOP_BUTTON_SELECTOR = '[data-testid="stop-button"]';
 export const SEND_BUTTON_SELECTOR = '[data-testid="send-button"]';
 export const MODEL_BUTTON_SELECTOR = '[data-testid="model-switcher-dropdown-button"]';

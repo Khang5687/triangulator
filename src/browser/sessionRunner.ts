@@ -61,6 +61,7 @@ export async function runBrowserSessionExecution(
     config: browserConfig,
     log,
     heartbeatIntervalMs: runOptions.heartbeatIntervalMs,
+    verbose: runOptions.verbose,
   });
   if (!runOptions.silent) {
     log(chalk.bold('Answer:'));

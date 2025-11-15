@@ -32,3 +32,27 @@ export function estimateTokenCount(text: string): number {
   const estimate = Math.max(words.length * 0.75, text.length / 4);
   return Math.max(1, Math.round(estimate));
 }
+
+export interface RetryOptions {
+  retries?: number;
+  delayMs?: number;
+  onRetry?: (attempt: number, error: unknown) => void;
+}
+
+export async function withRetries<T>(task: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  const { retries = 2, delayMs = 250, onRetry } = options;
+  let attempt = 0;
+  while (attempt <= retries) {
+    try {
+      return await task();
+    } catch (error) {
+      if (attempt === retries) {
+        throw error;
+      }
+      attempt += 1;
+      onRetry?.(attempt, error);
+      await delay(delayMs * attempt);
+    }
+  }
+  throw new Error('withRetries exhausted without result');
+}

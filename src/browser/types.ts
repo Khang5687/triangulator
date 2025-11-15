@@ -52,6 +52,7 @@ export interface BrowserRunOptions {
   config?: BrowserAutomationConfig;
   log?: (message: string) => void;
   heartbeatIntervalMs?: number;
+  verbose?: boolean;
 }
 
 export interface BrowserRunResult {

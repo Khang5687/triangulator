@@ -15,8 +15,9 @@ import {
   captureAssistantMarkdown,
   uploadAttachmentFile,
   waitForAttachmentCompletion,
+  readAssistantSnapshot,
 } from './pageActions.js';
-import { estimateTokenCount } from './utils.js';
+import { estimateTokenCount, withRetries } from './utils.js';
 import { formatElapsed } from '../oracle/format.js';
 
 export type { BrowserAutomationConfig, BrowserRunOptions, BrowserRunResult } from './types.js';
@@ -103,7 +104,18 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
     logger(`Prompt textarea ready (initial focus, ${promptText.length.toLocaleString()} chars queued)`);
     if (config.desiredModel) {
-      await ensureModelSelection(Runtime, config.desiredModel, logger);
+      await withRetries(
+        () => ensureModelSelection(Runtime, config.desiredModel as string, logger),
+        {
+          retries: 2,
+          delayMs: 300,
+          onRetry: (attempt, error) => {
+            if (options.verbose) {
+              logger(`[retry] Model picker attempt ${attempt + 1}: ${error instanceof Error ? error.message : error}`);
+            }
+          },
+        },
+      );
       await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
       logger(`Prompt textarea ready (after model switch, ${promptText.length.toLocaleString()} chars queued)`);
     }
@@ -120,11 +132,30 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       logger('All attachments uploaded');
     }
     await submitPrompt({ runtime: Runtime, input: Input }, promptText, logger);
-    stopThinkingMonitor = startThinkingStatusMonitor(Runtime, logger);
+    stopThinkingMonitor = startThinkingStatusMonitor(Runtime, logger, options.verbose ?? false);
     const answer = await waitForAssistantResponse(Runtime, config.timeoutMs, logger);
     answerText = answer.text;
     answerHtml = answer.html ?? '';
-    const copiedMarkdown = await captureAssistantMarkdown(Runtime, answer.meta, logger);
+    const copiedMarkdown = await withRetries(
+      async () => {
+        const attempt = await captureAssistantMarkdown(Runtime, answer.meta, logger);
+        if (!attempt) {
+          throw new Error('copy-missing');
+        }
+        return attempt;
+      },
+      {
+        retries: 2,
+        delayMs: 350,
+        onRetry: (attempt, error) => {
+          if (options.verbose) {
+            logger(
+              `[retry] Markdown capture attempt ${attempt + 1}: ${error instanceof Error ? error.message : error}`,
+            );
+          }
+        },
+      },
+    ).catch(() => null);
     answerMarkdown = copiedMarkdown ?? answerText;
     stopThinkingMonitor?.();
     runStatus = 'complete';
@@ -214,7 +245,11 @@ function isWebSocketClosureError(error: Error): boolean {
   );
 }
 
-function startThinkingStatusMonitor(Runtime: ChromeClient['Runtime'], logger: BrowserLogger): () => void {
+function startThinkingStatusMonitor(
+  Runtime: ChromeClient['Runtime'],
+  logger: BrowserLogger,
+  includeDiagnostics = false,
+): () => void {
   let stopped = false;
   let pending = false;
   let lastMessage: string | null = null;
@@ -230,7 +265,16 @@ function startThinkingStatusMonitor(Runtime: ChromeClient['Runtime'], logger: Br
       if (nextMessage && nextMessage !== lastMessage) {
         lastMessage = nextMessage;
         const elapsedText = formatElapsed(Date.now() - startedAt);
-        logger(`[${elapsedText} / ~10m] Pro thinking: ${nextMessage}`);
+        let locatorSuffix = '';
+        if (includeDiagnostics) {
+          try {
+            const snapshot = await readAssistantSnapshot(Runtime);
+            locatorSuffix = ` | assistant-turn=${snapshot ? 'present' : 'missing'}`;
+          } catch {
+            locatorSuffix = ' | assistant-turn=error';
+          }
+        }
+        logger(`[${elapsedText} / ~10m] Pro thinking: ${nextMessage}${locatorSuffix}`);
       }
     } catch {
       // ignore DOM polling errors

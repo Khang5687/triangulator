@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { parseDuration, estimateTokenCount, delay } from '../../src/browser/utils.js';
+import { parseDuration, estimateTokenCount, delay, withRetries } from '../../src/browser/utils.js';
 
 describe('parseDuration', () => {
   test.each([
@@ -36,5 +36,20 @@ describe('delay', () => {
     await vi.advanceTimersByTimeAsync(500);
     await expect(pending).resolves.toBeUndefined();
     vi.useRealTimers();
+  });
+});
+
+describe('withRetries', () => {
+  test('retries failing tasks before succeeding', async () => {
+    let attempt = 0;
+    const result = await withRetries(async () => {
+      attempt += 1;
+      if (attempt < 3) {
+        throw new Error('nope');
+      }
+      return 'done';
+    }, { retries: 3, delayMs: 1 });
+    expect(result).toBe('done');
+    expect(attempt).toBe(3);
   });
 });

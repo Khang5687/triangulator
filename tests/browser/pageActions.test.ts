@@ -70,6 +70,24 @@ describe('waitForAssistantResponse', () => {
     await expect(waitForAssistantResponse(runtime, 100, logger)).rejects.toThrow('stop');
     expect(capturedExpression).toContain('characterData: true');
   });
+
+  test('falls back to snapshot when observer fails', async () => {
+    const evaluate = vi.fn().mockImplementation(async (params: { expression?: string; awaitPromise?: boolean }) => {
+      if (params?.awaitPromise) {
+        throw new Error('observer failed');
+      }
+      if (typeof params?.expression === 'string' && params.expression.includes('extractAssistantTurn')) {
+        return {
+          result: { value: { text: 'Recovered', html: '<p>Recovered</p>', messageId: 'mid', turnId: 'tid' } },
+        };
+      }
+      return { result: { value: null } };
+    });
+    const runtime = { evaluate } as unknown as ChromeClient['Runtime'];
+    const result = await waitForAssistantResponse(runtime, 200, logger);
+    expect(result.text).toBe('Recovered');
+    expect(evaluate).toHaveBeenCalled();
+  });
 });
 
 describe('uploadAttachmentFile', () => {

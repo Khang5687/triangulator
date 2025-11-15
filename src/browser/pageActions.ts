@@ -7,6 +7,8 @@ import {
   MODEL_BUTTON_SELECTOR,
   SEND_BUTTON_SELECTOR,
   STOP_BUTTON_SELECTOR,
+  CONVERSATION_TURN_SELECTOR,
+  ASSISTANT_ROLE_SELECTOR,
 } from './constants.js';
 import { delay } from './utils.js';
 
@@ -485,7 +487,8 @@ async function verifyPromptCommitted(Runtime: ChromeClient['Runtime'], prompt: s
     const fallback = document.querySelector('textarea[name="prompt-textarea"]');
     const normalize = (value) => value?.toLowerCase?.().replace(/\\s+/g, ' ').trim() ?? '';
     const normalizedPrompt = normalize(${encodedPrompt});
-    const articles = Array.from(document.querySelectorAll('article[data-testid^="conversation-turn"]'));
+    const CONVERSATION_SELECTOR = ${JSON.stringify(CONVERSATION_TURN_SELECTOR)};
+    const articles = Array.from(document.querySelectorAll(CONVERSATION_SELECTOR));
     const userMatched = articles.some((node) => normalize(node?.innerText).includes(normalizedPrompt));
     return {
       userMatched,
@@ -571,6 +574,12 @@ export async function waitForAssistantResponse(
   try {
     evaluation = await Runtime.evaluate({ expression, awaitPromise: true, returnByValue: true });
   } catch (error) {
+    const snapshot = await waitForAssistantSnapshot(Runtime, Math.min(timeoutMs, 10_000));
+    const recovered = normalizeAssistantSnapshot(snapshot);
+    if (recovered) {
+      logger('Recovered assistant response via polling fallback');
+      return recovered;
+    }
     await logConversationSnapshot(Runtime, logger).catch(() => undefined);
     throw error;
   }
@@ -587,10 +596,30 @@ export async function waitForAssistantResponse(
   }
   const fallbackText = typeof result.value === 'string' ? (result.value as string) : '';
   if (!fallbackText) {
+    const snapshot = await waitForAssistantSnapshot(Runtime, Math.min(timeoutMs, 10_000));
+    const recovered = normalizeAssistantSnapshot(snapshot);
+    if (recovered) {
+      logger('Recovered assistant response via polling fallback');
+      return recovered;
+    }
     await logConversationSnapshot(Runtime, logger).catch(() => undefined);
     throw new Error('Unable to capture assistant response');
   }
   return { text: fallbackText, html: undefined, meta: {} };
+}
+
+function normalizeAssistantSnapshot(
+  snapshot: AssistantSnapshot | null,
+): { text: string; html?: string; meta: { turnId?: string | null; messageId?: string | null } } | null {
+  const text = snapshot?.text?.trim();
+  if (!text) {
+    return null;
+  }
+  return {
+    text,
+    html: snapshot?.html ?? undefined,
+    meta: { turnId: snapshot?.turnId ?? undefined, messageId: snapshot?.messageId ?? undefined },
+  };
 }
 
 async function logConversationSnapshot(Runtime: ChromeClient['Runtime'], logger: BrowserLogger) {
@@ -602,25 +631,23 @@ async function logConversationSnapshot(Runtime: ChromeClient['Runtime'], logger:
   }
 }
 
-function buildResponseObserverExpression(timeoutMs: number): string {
-  const selectorsLiteral = JSON.stringify(ANSWER_SELECTORS);
-  return `(() => {
-    const SELECTORS = ${selectorsLiteral};
-    const STOP_SELECTOR = '${STOP_BUTTON_SELECTOR}';
-    const CONVERSATION_SELECTOR = 'article[data-testid^="conversation-turn"]';
-    const settleDelayMs = 800;
-
+function buildAssistantExtractor(functionName: string): string {
+  const conversationLiteral = JSON.stringify(CONVERSATION_TURN_SELECTOR);
+  const assistantLiteral = JSON.stringify(ASSISTANT_ROLE_SELECTOR);
+  return `const ${functionName} = () => {
+    const CONVERSATION_SELECTOR = ${conversationLiteral};
+    const ASSISTANT_SELECTOR = ${assistantLiteral};
     const isAssistantTurn = (node) => {
       if (!(node instanceof HTMLElement)) return false;
       const role = (node.getAttribute('data-message-author-role') || node.dataset?.messageAuthorRole || '').toLowerCase();
       if (role === 'assistant') {
         return true;
       }
-      const testId = node.getAttribute('data-testid') || '';
+      const testId = (node.getAttribute('data-testid') || '').toLowerCase();
       if (testId.includes('assistant')) {
         return true;
       }
-      return Boolean(node.querySelector('[data-message-author-role="assistant"], [data-testid*="assistant"]'));
+      return Boolean(node.querySelector(ASSISTANT_SELECTOR) || node.querySelector('[data-testid*="assistant"]'));
     };
 
     const expandCollapsibles = (root) => {
@@ -640,29 +667,37 @@ function buildResponseObserverExpression(timeoutMs: number): string {
       }
     };
 
-    const extractFromTurns = () => {
-      const turns = Array.from(document.querySelectorAll(CONVERSATION_SELECTOR));
-      for (let index = turns.length - 1; index >= 0; index -= 1) {
-        const turn = turns[index];
-        if (!isAssistantTurn(turn)) {
-          continue;
-        }
-        const messageRoot = turn.querySelector('[data-message-author-role="assistant"]') ?? turn;
-        expandCollapsibles(messageRoot);
-        const preferred =
-          messageRoot.querySelector('.markdown') ||
-          messageRoot.querySelector('[data-message-content]') ||
-          messageRoot;
-        const text = preferred?.innerText ?? '';
-        const html = preferred?.innerHTML ?? '';
-        const messageId = messageRoot.getAttribute('data-message-id');
-        const turnId = messageRoot.getAttribute('data-testid');
-        if (text.trim()) {
-          return { text, html, messageId, turnId };
-        }
+    const turns = Array.from(document.querySelectorAll(CONVERSATION_SELECTOR));
+    for (let index = turns.length - 1; index >= 0; index -= 1) {
+      const turn = turns[index];
+      if (!isAssistantTurn(turn)) {
+        continue;
       }
-      return null;
-    };
+      const messageRoot = turn.querySelector(ASSISTANT_SELECTOR) ?? turn;
+      expandCollapsibles(messageRoot);
+      const preferred =
+        messageRoot.querySelector('.markdown') ||
+        messageRoot.querySelector('[data-message-content]') ||
+        messageRoot;
+      const text = preferred?.innerText ?? '';
+      const html = preferred?.innerHTML ?? '';
+      const messageId = messageRoot.getAttribute('data-message-id');
+      const turnId = messageRoot.getAttribute('data-testid');
+      if (text.trim()) {
+        return { text, html, messageId, turnId };
+      }
+    }
+    return null;
+  };`;
+}
+
+function buildResponseObserverExpression(timeoutMs: number): string {
+  const selectorsLiteral = JSON.stringify(ANSWER_SELECTORS);
+  return `(() => {
+    const SELECTORS = ${selectorsLiteral};
+    const STOP_SELECTOR = '${STOP_BUTTON_SELECTOR}';
+    const settleDelayMs = 800;
+    ${buildAssistantExtractor('extractFromTurns')}
 
     const captureViaObserver = () =>
       new Promise((resolve, reject) => {
@@ -734,9 +769,49 @@ function buildResponseObserverExpression(timeoutMs: number): string {
   })()`;
 }
 
+function buildAssistantSnapshotExpression(): string {
+  return `(() => {
+    ${buildAssistantExtractor('extractAssistantTurn')}
+    return extractAssistantTurn();
+  })()`;
+}
+
+interface AssistantSnapshot {
+  text?: string;
+  html?: string;
+  messageId?: string | null;
+  turnId?: string | null;
+}
+
+export async function readAssistantSnapshot(Runtime: ChromeClient['Runtime']): Promise<AssistantSnapshot | null> {
+  const { result } = await Runtime.evaluate({ expression: buildAssistantSnapshotExpression(), returnByValue: true });
+  const value = result?.value;
+  if (value && typeof value === 'object') {
+    return value as AssistantSnapshot;
+  }
+  return null;
+}
+
+async function waitForAssistantSnapshot(Runtime: ChromeClient['Runtime'], timeoutMs: number): Promise<AssistantSnapshot | null> {
+  return waitForCondition(() => readAssistantSnapshot(Runtime), timeoutMs);
+}
+
+async function waitForCondition<T>(getter: () => Promise<T | null>, timeoutMs: number, pollIntervalMs = 400): Promise<T | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = await getter();
+    if (value) {
+      return value;
+    }
+    await delay(pollIntervalMs);
+  }
+  return null;
+}
+
 function buildConversationDebugExpression(): string {
   return `(() => {
-    const turns = Array.from(document.querySelectorAll('article[data-testid^="conversation-turn"]'));
+    const CONVERSATION_SELECTOR = ${JSON.stringify(CONVERSATION_TURN_SELECTOR)};
+    const turns = Array.from(document.querySelectorAll(CONVERSATION_SELECTOR));
     return turns.map((node) => ({
       role: node.getAttribute('data-message-author-role'),
       text: node.innerText?.slice(0, 200),
