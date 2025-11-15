@@ -70,7 +70,7 @@ describe('handleSessionCommand', () => {
 
   test('clears sessions when --clear is provided', async () => {
     const command = createCommandWithOptions({ hours: 6, limit: 5, all: false, clear: true });
-    const deleteSessionsOlderThan = vi.fn().mockResolvedValue({ deleted: 3 });
+    const deleteSessionsOlderThan = vi.fn().mockResolvedValue({ deleted: 3, remaining: 2 });
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     await handleSessionCommand(undefined, command, {
       showStatus: vi.fn(),
@@ -79,7 +79,9 @@ describe('handleSessionCommand', () => {
       deleteSessionsOlderThan,
     });
     expect(deleteSessionsOlderThan).toHaveBeenCalledWith({ hours: 6, includeAll: false });
-    expect(logSpy).toHaveBeenCalledWith('Deleted 3 sessions (sessions older than 6h).');
+    expect(logSpy).toHaveBeenCalledWith(
+      'Deleted 3 sessions (sessions older than 6h). 2 sessions remain.\nRun "oracle session --clear --all" to delete everything.',
+    );
   });
 
   test('rejects slug-style "clear" ids with guidance', async () => {

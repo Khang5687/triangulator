@@ -158,7 +158,7 @@ describe('session listing and filtering', () => {
     vi.setSystemTime(new Date('2025-01-03T12:00:00Z'));
 
     const result = await sessionModule.deleteSessionsOlderThan({ hours: 24 });
-    expect(result.deleted).toBe(1);
+    expect(result).toEqual({ deleted: 1, remaining: 1 });
     expect(await sessionModule.readSessionMetadata(oldMeta.id)).toBeNull();
     expect(await sessionModule.readSessionMetadata(freshMeta.id)).not.toBeNull();
     vi.useRealTimers();
@@ -167,7 +167,7 @@ describe('session listing and filtering', () => {
   test('deleteSessionsOlderThan clears everything when includeAll is true', async () => {
     const meta = await sessionModule.initializeSession({ prompt: 'Only', model: 'gpt-5-pro' }, '/tmp/c');
     const result = await sessionModule.deleteSessionsOlderThan({ includeAll: true });
-    expect(result.deleted).toBe(1);
+    expect(result).toEqual({ deleted: 1, remaining: 0 });
     expect(await sessionModule.readSessionMetadata(meta.id)).toBeNull();
   });
 });

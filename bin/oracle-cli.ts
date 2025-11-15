@@ -31,7 +31,7 @@ import { buildBrowserConfig, resolveBrowserModelLabel } from '../src/cli/browser
 import { performSessionRun } from '../src/cli/sessionRunner.js';
 import { attachSession, showStatus } from '../src/cli/sessionDisplay.js';
 import type { ShowStatusOptions } from '../src/cli/sessionDisplay.js';
-import { handleSessionCommand, type StatusOptions } from '../src/cli/sessionCommand.js';
+import { handleSessionCommand, type StatusOptions, formatSessionCleanupMessage } from '../src/cli/sessionCommand.js';
 import { isErrorLogged } from '../src/cli/errorUtils.js';
 
 type EngineMode = 'api' | 'browser';
@@ -173,7 +173,7 @@ const statusCommand = program
       const includeAll = statusOptions.all;
       const result = await deleteSessionsOlderThan({ hours, includeAll });
       const scope = includeAll ? 'all stored sessions' : `sessions older than ${hours}h`;
-      console.log(`Deleted ${result.deleted} ${result.deleted === 1 ? 'session' : 'sessions'} (${scope}).`);
+      console.log(formatSessionCleanupMessage(result, scope));
       return;
     }
     if (sessionId === 'clear' || sessionId === 'clean') {

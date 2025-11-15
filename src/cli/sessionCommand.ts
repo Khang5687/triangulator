@@ -42,7 +42,7 @@ export async function handleSessionCommand(
     const includeAll = sessionOptions.all;
     const result = await deps.deleteSessionsOlderThan({ hours, includeAll });
     const scope = includeAll ? 'all stored sessions' : `sessions older than ${hours}h`;
-    console.log(`Deleted ${result.deleted} ${result.deleted === 1 ? 'session' : 'sessions'} (${scope}).`);
+    console.log(formatSessionCleanupMessage(result, scope));
     return;
   }
   if (sessionId === 'clear' || sessionId === 'clean') {
@@ -61,4 +61,14 @@ export async function handleSessionCommand(
     return;
   }
   await deps.attachSession(sessionId);
+}
+
+export function formatSessionCleanupMessage(
+  result: { deleted: number; remaining: number },
+  scope: string,
+): string {
+  const deletedLabel = `${result.deleted} ${result.deleted === 1 ? 'session' : 'sessions'}`;
+  const remainingLabel = `${result.remaining} ${result.remaining === 1 ? 'session' : 'sessions'} remain`;
+  const hint = 'Run "oracle session --clear --all" to delete everything.';
+  return `Deleted ${deletedLabel} (${scope}). ${remainingLabel}.\n${hint}`;
 }

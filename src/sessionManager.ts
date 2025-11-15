@@ -284,11 +284,11 @@ export async function readSessionLog(sessionId: string): Promise<string> {
 export async function deleteSessionsOlderThan({
   hours = 24,
   includeAll = false,
-}: { hours?: number; includeAll?: boolean } = {}): Promise<{ deleted: number }> {
+}: { hours?: number; includeAll?: boolean } = {}): Promise<{ deleted: number; remaining: number }> {
   await ensureSessionStorage();
   const entries = await fs.readdir(SESSIONS_DIR).catch(() => []);
   if (!entries.length) {
-    return { deleted: 0 };
+    return { deleted: 0, remaining: 0 };
   }
   const cutoff = includeAll ? Number.NEGATIVE_INFINITY : Date.now() - hours * 60 * 60 * 1000;
   let deleted = 0;
@@ -317,7 +317,8 @@ export async function deleteSessionsOlderThan({
     }
   }
 
-  return { deleted };
+  const remaining = Math.max(entries.length - deleted, 0);
+  return { deleted, remaining };
 }
 
 export async function wait(ms: number): Promise<void> {
