@@ -1,4 +1,4 @@
-import { Marked } from 'marked';
+import { Marked, Parser } from 'marked';
 import TerminalRenderer from 'marked-terminal';
 
 const terminalRenderer = new TerminalRenderer({
@@ -6,6 +6,11 @@ const terminalRenderer = new TerminalRenderer({
   width: process.stdout.columns ? Math.max(20, process.stdout.columns - 2) : undefined,
   tab: 2,
 });
+
+const markedWithTerminal = new Marked();
+const parser = new Parser(markedWithTerminal.defaults);
+// Give terminal renderer a parser so its helpers (heading, link, etc.) can call parseInline.
+(terminalRenderer as unknown as { parser: Parser }).parser = parser;
 
 // Marked v15 validates renderer keys; supply only the supported render functions.
 const allowedKeys = [
@@ -39,9 +44,7 @@ for (const key of allowedKeys) {
   }
 }
 
-const markedWithTerminal = new Marked({ renderer: filteredRenderer });
-// Ensure the bound renderer has access to the parser instance Marked creates.
-(terminalRenderer as unknown as { parser?: unknown }).parser = (markedWithTerminal as unknown as { parser?: unknown }).parser;
+markedWithTerminal.use({ renderer: filteredRenderer });
 
 /**
  * Render markdown to ANSI-colored text suitable for a TTY.
