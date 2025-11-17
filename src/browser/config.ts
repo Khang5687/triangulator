@@ -18,6 +18,7 @@ export const DEFAULT_BROWSER_CONFIG: ResolvedBrowserConfig = {
   desiredModel: DEFAULT_MODEL_TARGET,
   debug: false,
   allowCookieErrors: false,
+  remoteChrome: null,
 };
 
 export function resolveBrowserConfig(config: BrowserAutomationConfig | undefined): ResolvedBrowserConfig {

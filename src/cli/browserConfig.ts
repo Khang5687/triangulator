@@ -32,6 +32,7 @@ export interface BrowserFlagOptions {
   browserKeepBrowser?: boolean;
   browserModelLabel?: string;
   browserAllowCookieErrors?: boolean;
+  remoteChrome?: string;
   model: ModelName;
   verbose?: boolean;
 }
@@ -49,6 +50,20 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
     envFile: process.env.ORACLE_BROWSER_COOKIES_FILE,
     cwd: process.cwd(),
   });
+
+  let remoteChrome: { host: string; port: number } | undefined;
+  if (options.remoteChrome) {
+    const parts = options.remoteChrome.split(':');
+    if (parts.length === 2) {
+      remoteChrome = {
+        host: parts[0],
+        port: parseInt(parts[1], 10),
+      };
+    } else {
+      throw new Error(`Invalid remote-chrome format: ${options.remoteChrome}. Expected host:port`);
+    }
+  }
+
   return {
     chromeProfile: options.browserChromeProfile ?? DEFAULT_CHROME_PROFILE,
     chromePath: options.browserChromePath ?? null,
@@ -68,6 +83,7 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
     desiredModel: shouldUseOverride ? desiredModelOverride : mapModelToBrowserLabel(options.model),
     debug: options.verbose ? true : undefined,
     allowCookieErrors: options.browserAllowCookieErrors ? true : undefined,
+    remoteChrome,
   };
 }
 

@@ -52,6 +52,7 @@ export interface BrowserAutomationConfig {
   desiredModel?: string | null;
   debug?: boolean;
   allowCookieErrors?: boolean;
+  remoteChrome?: { host: string; port: number } | null;
 }
 
 export interface BrowserRunOptions {
@@ -76,11 +77,12 @@ export interface BrowserRunResult {
 }
 
 export type ResolvedBrowserConfig = Required<
-  Omit<BrowserAutomationConfig, 'chromeProfile' | 'chromePath' | 'chromeCookiePath' | 'desiredModel'>
+  Omit<BrowserAutomationConfig, 'chromeProfile' | 'chromePath' | 'chromeCookiePath' | 'desiredModel' | 'remoteChrome'>
 > & {
   chromeProfile?: string | null;
   chromePath?: string | null;
   chromeCookiePath?: string | null;
   desiredModel?: string | null;
   inlineCookiesSource?: string | null;
+  remoteChrome?: { host: string; port: number } | null;
 };
