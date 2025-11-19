@@ -2,7 +2,7 @@ import notifier from 'toasted-notifier';
 import { spawn } from 'node:child_process';
 import { formatUSD, formatNumber } from '../oracle/format.js';
 import { MODEL_CONFIGS } from '../oracle/config.js';
-import type { SessionMode, SessionMetadata } from '../sessionManager.js';
+import type { SessionMode, SessionMetadata } from '../sessionStore.js';
 import type { NotifyConfig } from '../config.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';

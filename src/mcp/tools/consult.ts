@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getCliVersion } from '../../version.js';
 import { LoggingMessageNotificationParamsSchema } from '@modelcontextprotocol/sdk/types.js';
 import { ensureBrowserAvailable, mapConsultToRunOptions } from '../utils.js';
-import type { BrowserSessionConfig } from '../../sessionManager.js';
+import type { BrowserSessionConfig } from '../../sessionStore.js';
 import { sessionStore } from '../../sessionStore.js';
 
 async function readSessionLogTail(sessionId: string, maxBytes: number): Promise<string | null> {

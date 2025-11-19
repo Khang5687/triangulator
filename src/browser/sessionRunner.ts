@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { RunOracleOptions } from '../oracle.js';
 import { formatElapsed } from '../oracle.js';
-import type { BrowserSessionConfig, BrowserRuntimeMetadata } from '../sessionManager.js';
+import type { BrowserSessionConfig, BrowserRuntimeMetadata } from '../sessionStore.js';
 import { runBrowserMode } from '../browserMode.js';
 import type { BrowserRunResult } from '../browserMode.js';
 import { assembleBrowserPrompt } from './prompt.js';

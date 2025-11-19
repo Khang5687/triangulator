@@ -12,7 +12,7 @@ import {
 } from '../oracle.js';
 import { assembleBrowserPrompt, type BrowserPromptArtifacts } from '../browser/prompt.js';
 import type { BrowserAttachment } from '../browser/types.js';
-import type { BrowserSessionConfig } from '../sessionManager.js';
+import type { BrowserSessionConfig } from '../sessionStore.js';
 import { buildTokenEstimateSuffix, formatAttachmentLabel } from '../browser/promptSummary.js';
 
 interface DryRunDeps {

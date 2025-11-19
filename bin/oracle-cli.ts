@@ -8,7 +8,7 @@ import type { OptionValues } from 'commander';
 import { resolveEngine, type EngineMode, defaultWaitPreference } from '../src/cli/engine.js';
 import { shouldRequirePrompt } from '../src/cli/promptRequirement.js';
 import chalk from 'chalk';
-import type { SessionMetadata, SessionMode, BrowserSessionConfig } from '../src/sessionManager.js';
+import type { SessionMetadata, SessionMode, BrowserSessionConfig } from '../src/sessionStore.js';
 import { sessionStore } from '../src/sessionStore.js';
 import { runOracle, renderPromptMarkdown, readFiles } from '../src/oracle.js';
 import type { ModelName, PreviewMode, RunOracleOptions } from '../src/oracle.js';

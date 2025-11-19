@@ -1,5 +1,5 @@
 import kleur from 'kleur';
-import type { SessionMetadata, SessionMode, BrowserSessionConfig } from '../sessionManager.js';
+import type { SessionMetadata, SessionMode, BrowserSessionConfig } from '../sessionStore.js';
 import type { RunOracleOptions, UsageSummary } from '../oracle.js';
 import {
   runOracle,

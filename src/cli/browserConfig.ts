@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import type { BrowserSessionConfig } from '../sessionManager.js';
+import type { BrowserSessionConfig } from '../sessionStore.js';
 import type { ModelName } from '../oracle.js';
 import { DEFAULT_MODEL_TARGET, parseDuration } from '../browserMode.js';
 import type { CookieParam } from '../browser/types.js';

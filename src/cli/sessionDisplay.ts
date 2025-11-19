@@ -6,7 +6,7 @@ import type {
   SessionUserErrorMetadata,
   SessionStatus,
   SessionModelRun,
-} from '../sessionManager.js';
+} from '../sessionStore.js';
 import type { OracleResponseMetadata } from '../oracle.js';
 import { renderMarkdownAnsi } from './markdownRenderer.js';
 import { formatElapsed, formatUSD } from '../oracle/format.js';

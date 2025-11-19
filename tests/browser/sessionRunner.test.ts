@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { RunOracleOptions } from '../../src/oracle.js';
-import type { BrowserSessionConfig } from '../../src/sessionManager.js';
+import type { BrowserSessionConfig } from '../../src/sessionStore.js';
 import { runBrowserSessionExecution } from '../../src/browser/sessionRunner.js';
 import { BrowserAutomationError } from '../../src/oracle/errors.js';
 import { getCliVersion } from '../../src/version.js';

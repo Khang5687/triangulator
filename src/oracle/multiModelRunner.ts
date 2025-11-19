@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { SessionMetadata } from '../sessionManager.js';
+import type { SessionMetadata } from '../sessionStore.js';
 import type { RunOracleOptions, ModelName, UsageSummary } from '../oracle.js';
 import {
   runOracle,

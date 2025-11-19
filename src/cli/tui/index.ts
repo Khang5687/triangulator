@@ -6,7 +6,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import { MODEL_CONFIGS, type ModelName, type RunOracleOptions } from '../../oracle.js';
 import { renderMarkdownAnsi } from '../markdownRenderer.js';
-import type { SessionMetadata, SessionMode, BrowserSessionConfig } from '../../sessionManager.js';
+import type { SessionMetadata, SessionMode, BrowserSessionConfig } from '../../sessionStore.js';
 import { sessionStore } from '../../sessionStore.js';
 import { performSessionRun } from '../sessionRunner.js';
 import { MAX_RENDER_BYTES, trimBeforeFirstAnswer } from '../sessionDisplay.js';
