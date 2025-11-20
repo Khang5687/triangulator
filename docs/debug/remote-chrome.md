@@ -59,6 +59,7 @@ Actions taken on VM (tmux `vmssh`):
 - If cookie loading keeps failing under SSH/nohup, start `oracle serve` from a GUI macOS session or switch to Node 20 to avoid Keychain issues.
 - Retry local command above; ensure service logs show incoming /runs and that the login probe passes (no login button).
 - Optional: switch to a fresh port/token (`oracle serve` with no args) to avoid lingering listeners.
+- Code change (2025-11-20): `loadChromeCookies` now probes the macOS Keychain with a timeout and fails fast instead of hanging when Keychain access is denied. Remote runs should now emit a clear error instead of a socket hang up if the service can’t read Chrome cookies; re-test the SSH/nohup scenario.
 
 ## Notes
 - Remote mode forces `--wait`, disables detach, and logs when routing to remote executor.

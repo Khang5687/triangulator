@@ -7,6 +7,13 @@ import { COOKIE_URLS } from './constants.js';
 import type { CookieParam } from './types.js';
 import './keytarShim.js';
 
+type KeychainLabel = { service: string; account: string };
+type KeytarLike = { getPassword: (service: string, account: string) => Promise<string | null> };
+
+const COOKIE_READ_TIMEOUT_MS = readDuration('ORACLE_COOKIE_LOAD_TIMEOUT_MS', 5_000);
+const KEYCHAIN_PROBE_TIMEOUT_MS = readDuration('ORACLE_KEYCHAIN_PROBE_TIMEOUT_MS', 3_000);
+const MAC_KEYCHAIN_LABELS = loadKeychainLabels();
+
 export interface LoadChromeCookiesOptions {
   targetUrl: string;
   profile?: string | null;
@@ -24,8 +31,20 @@ export async function loadChromeCookies({
   const merged = new Map<string, CookieParam>();
   const cookieFile = await resolveCookieFilePath({ explicitPath: explicitCookiePath, profile });
 
+  await ensureMacKeychainReadable();
+
   for (const url of urlsToCheck) {
-    const raw = await chromeCookies.getCookiesPromised(url, 'puppeteer', cookieFile);
+    let raw: unknown;
+    try {
+      raw = await settleWithTimeout(
+        chromeCookies.getCookiesPromised(url, 'puppeteer', cookieFile),
+        COOKIE_READ_TIMEOUT_MS,
+        `Timed out reading Chrome cookies from ${cookieFile} (after ${COOKIE_READ_TIMEOUT_MS} ms)`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to load Chrome cookies for ${url}: ${message}`);
+    }
     if (!Array.isArray(raw)) continue;
     const fallbackHost = new URL(url).hostname;
     for (const cookie of raw) {
@@ -41,6 +60,59 @@ export async function loadChromeCookies({
   return Array.from(merged.values());
 }
 
+async function ensureMacKeychainReadable(): Promise<void> {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+  // chrome-cookies-secure can hang forever when macOS Keychain rejects access (e.g., SSH/no GUI).
+  // Probe the keychain ourselves with a timeout so callers fail fast instead of blocking the run.
+  const keytarModule = await import('keytar');
+  const keytar = (keytarModule.default ?? keytarModule) as KeytarLike;
+  const password = await settleWithTimeout(
+    findKeychainPassword(keytar, MAC_KEYCHAIN_LABELS),
+    KEYCHAIN_PROBE_TIMEOUT_MS,
+    `Timed out reading macOS Keychain while looking up Chrome Safe Storage (after ${KEYCHAIN_PROBE_TIMEOUT_MS} ms). Unlock the login keychain or start oracle serve from a GUI session.`,
+  );
+  if (!password) {
+    throw new Error(
+      'macOS Keychain denied access to Chrome cookies. Unlock the login keychain or run oracle serve from a GUI session, then retry.',
+    );
+  }
+}
+
+async function findKeychainPassword(keytar: KeytarLike, labels: KeychainLabel[]): Promise<string | null> {
+  let lastError: Error | null = null;
+  for (const label of labels) {
+    try {
+      const value = await keytar.getPassword(label.service, label.account);
+      if (value) return value;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  if (lastError) {
+    throw lastError;
+  }
+  return null;
+}
+
+function settleWithTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    timer.unref?.();
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 function normalizeCookie(
   cookie: {
     name?: string;
@@ -48,8 +120,10 @@ function normalizeCookie(
     domain?: string;
     path?: string;
     expires?: number;
-    Secure?: boolean;
-    HttpOnly?: boolean;
+    // biome-ignore lint/style/useNamingConvention: mirrors chromium column names
+    'Secure'?: boolean;
+    // biome-ignore lint/style/useNamingConvention: mirrors chromium column names
+    'HttpOnly'?: boolean;
   },
   fallbackHost: string,
 ): CookieParam | null {
@@ -189,6 +263,36 @@ function stripQuery(url: string): string {
   }
 }
 
+function readDuration(envKey: string, fallback: number): number {
+  const raw = process.env[envKey];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function loadKeychainLabels(): KeychainLabel[] {
+  const defaults: KeychainLabel[] = [
+    { service: 'Chrome Safe Storage', account: 'Chrome' },
+    { service: 'Chromium Safe Storage', account: 'Chromium' },
+    { service: 'Microsoft Edge Safe Storage', account: 'Microsoft Edge' },
+    { service: 'Brave Safe Storage', account: 'Brave' },
+    { service: 'Vivaldi Safe Storage', account: 'Vivaldi' },
+  ];
+  const rawEnv = process.env.ORACLE_KEYCHAIN_LABELS;
+  if (!rawEnv) return defaults;
+  try {
+    const parsed = JSON.parse(rawEnv);
+    if (!Array.isArray(parsed)) return defaults;
+    const envLabels = parsed
+      .map((entry) => (entry && typeof entry === 'object' ? entry : null))
+      .filter((entry): entry is KeychainLabel => Boolean(entry?.service && entry?.account));
+    return envLabels.length ? [...envLabels, ...defaults] : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+// biome-ignore lint/style/useNamingConvention: test-only export used in vitest suite
 export const __test__ = {
   normalizeExpiration,
   cleanValue,
