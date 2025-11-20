@@ -192,7 +192,6 @@ export async function createRemoteServer(
 
 export async function serveRemote(options: RemoteServerOptions = {}): Promise<void> {
   const server = await createRemoteServer(options);
-  console.log(`Access token: ${server.token}`);
   await new Promise<void>((resolve) => {
     const shutdown = () => {
       console.log('Shutting down remote service...');
