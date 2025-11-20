@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import chalk from 'chalk';
 import type { BrowserAttachment, BrowserLogger, CookieParam } from '../browser/types.js';
 import { runBrowserMode } from '../browserMode.js';
 import type { BrowserRunResult } from '../browserMode.js';
@@ -37,6 +38,10 @@ export async function createRemoteServer(
   const logger = options.logger ?? console.log;
   const authToken = options.token ?? randomBytes(16).toString('hex');
   const verbose = process.argv.includes('--verbose') || process.env.ORACLE_SERVE_VERBOSE === '1';
+  const color = process.stdout.isTTY
+    ? (formatter: (msg: string) => string, msg: string) => formatter(msg)
+    : (_formatter: (msg: string) => string, msg: string) => msg;
+  const eye = '🧿';
   // Single-flight guard: remote Chrome can only host one run at a time, so we serialize requests.
   let busy = false;
   let cachedInlineCookies: CookieParam[] | null = null;
@@ -176,8 +181,8 @@ export async function createRemoteServer(
   if (!address || typeof address === 'string') {
     throw new Error('Unable to determine server address.');
   }
-  logger(`Remote Oracle listening at ${address.address}:${address.port}`);
-  logger(`Access token: ${authToken}`);
+  logger(color(chalk.cyanBright.bold, `${eye} Remote Oracle listening at ${address.address}:${address.port}`));
+  logger(color(chalk.yellowBright, `Access token: ${authToken}`));
 
   return {
     port: address.port,
