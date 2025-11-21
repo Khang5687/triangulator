@@ -40,15 +40,19 @@ npx -y @steipete/oracle
 
 ## Integration
 
+**CLI**
 - API mode expects API keys in your environment: `OPENAI_API_KEY` (GPT-5.x), `GEMINI_API_KEY` (Gemini 3 Pro), `ANTHROPIC_API_KEY` (Claude Sonnet 4.5 / Opus 4.1).
 - Prefer API mode or `--copy` + manual paste; browser automation is experimental.
-- MCP server: `pnpm mcp` (or `oracle-mcp`) after building; see [docs/mcp.md](docs/mcp.md).
 - Remote browser service: `oracle serve` on a signed-in host; clients use `--remote-host/--remote-token`.
 - AGENTS.md/CLAUDE.md:
   ```
   - Oracle bundles a prompt plus the right files so another AI (GPT 5 Pro + more) can answer. Use when stuck/bugs/reviewing.
   - Run `npx -y @steipete/oracle --help` once per session before first use.
   ```
+
+**MCP**
+- `pnpm mcp` (or `oracle-mcp`) after building to run the stdio server.
+- Configure clients via `config/mcporter.json` or `.mcp.json`; see [docs/mcp.md](docs/mcp.md) for connection examples and scope options.
 
 ## Highlights
 
