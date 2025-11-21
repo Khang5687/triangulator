@@ -32,7 +32,6 @@ All notable changes to this project will be documented in this file.
 - Browser-to-API coercion now happens automatically for GPT-5.1 Codex and Gemini (with a console hint) instead of failing when `--engine browser` is set.
 - Multi-model output is easier to scan: aggregate header/summary, deduped per-model headings, and on-demand OSC progress when replaying combined logs.
 - `--write-output` adds stricter path safety, rejecting unsafe destinations while keeping writes non-fatal to avoid breaking runs.
-- Gemini client now uses Google’s `@google/genai` SDK (replacing the deprecated `@google/generative-ai`) while preserving streaming final responses and token accounting.
 - Session slugs now trim individual words to 10 characters to keep auto-generated IDs readable when prompts include very long tokens.
 - CLI: `--mode` is now a silent alias for `--engine` for backward compatibility with older docs/scripts; prefer `--engine`.
 - CLI guardrail: if a session with the same prompt is already running, new runs abort with guidance to reattach unless `--force` is provided (prevents unintended duplicate API/browser runs).
@@ -40,6 +39,8 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - macOS notifier quarantine repair now ignores missing `xattr` and surfaces only actionable errors, stabilizing desktop notifications.
 - Browser assistant capture is more resilient: markdown cleanup no longer drops real answers and prompt-echo recovery keeps the assistant text intact.
+- Browser cookie sync on Windows now copies the profile DB into a named temp directory with the expected `Cookies` filename so `chrome-cookies-secure` can read it reliably during browser fallbacks.
+- Streaming runs in `--render-plain` mode now send chunks directly to stdout and keep the log sink newline-aligned, preventing missing or double-printed output in TTY and background runs.
 
 ## 1.3.0 — 2025-11-19
 

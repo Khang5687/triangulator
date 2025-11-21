@@ -60,9 +60,7 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
     client,
     wait = defaultWait,
   } = deps;
-  const writingToStdout = deps.write === undefined;
   const stdoutWrite = process.stdout.write.bind(process.stdout);
-  const write = sinkWrite;
   const baseUrl = options.baseUrl?.trim() || process.env.OPENAI_BASE_URL?.trim();
 
   const logVerbose = (message: string): void => {

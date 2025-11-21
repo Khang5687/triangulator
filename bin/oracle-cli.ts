@@ -1048,8 +1048,9 @@ async function runInteractiveSession(
     logLine(message);
   };
   const combinedWrite = (chunk: string): boolean => {
+    // runOracle handles stdout; keep this write hook for session logs only to avoid double-printing
     writeChunk(chunk);
-    return process.stdout.write(chunk);
+    return true;
   };
   try {
     await performSessionRun({
