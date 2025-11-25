@@ -44,8 +44,8 @@ if [ "$runtime_ready" -ne 1 ]; then
   exit 1
 fi
 
-# Give ChatGPT a moment to finish after we have a runtime hint.
-sleep 5
+# Give ChatGPT time to finish after we have a runtime hint.
+sleep 15
 
 # Simulate controller loss.
 kill "$runner_pid" 2>/dev/null || true
