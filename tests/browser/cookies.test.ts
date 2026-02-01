@@ -16,15 +16,15 @@ describe('syncCookies', () => {
   test('replays cookies via DevTools Network.setCookie', async () => {
     getCookies.mockResolvedValue({
       cookies: [
-        { name: 'sid', value: 'abc', domain: 'chatgpt.com', path: '/', secure: true, httpOnly: true },
-        { name: 'csrftoken', value: 'xyz', domain: 'chatgpt.com', path: '/', secure: true, httpOnly: true },
+        { name: 'sid', value: 'abc', domain: 'perplexity.ai', path: '/', secure: true, httpOnly: true },
+        { name: 'csrftoken', value: 'xyz', domain: 'perplexity.ai', path: '/', secure: true, httpOnly: true },
       ],
       warnings: [],
     });
     const setCookie = vi.fn().mockResolvedValue({ success: true });
     const applied = await syncCookies(
       { setCookie } as unknown as ChromeClient['Network'],
-      'https://chatgpt.com',
+      'https://www.perplexity.ai',
       null,
       logger,
     );
@@ -35,7 +35,12 @@ describe('syncCookies', () => {
   test('throws when cookie load fails', async () => {
     getCookies.mockRejectedValue(new Error('boom'));
     await expect(
-      syncCookies({ setCookie: vi.fn() } as unknown as ChromeClient['Network'], 'https://chatgpt.com', null, logger),
+      syncCookies(
+        { setCookie: vi.fn() } as unknown as ChromeClient['Network'],
+        'https://www.perplexity.ai',
+        null,
+        logger,
+      ),
     ).rejects.toBeInstanceOf(ChromeCookieSyncError);
   });
 
@@ -43,7 +48,7 @@ describe('syncCookies', () => {
     getCookies.mockRejectedValue(new Error('boom'));
     const applied = await syncCookies(
       { setCookie: vi.fn() } as unknown as ChromeClient['Network'],
-      'https://chatgpt.com',
+      'https://www.perplexity.ai',
       null,
       logger,
       { allowErrors: true },
@@ -57,14 +62,14 @@ describe('syncCookies', () => {
     getCookies
       .mockRejectedValueOnce(new Error('keychain locked'))
       .mockResolvedValueOnce({
-        cookies: [{ name: 'sid', value: 'abc', domain: 'chatgpt.com', path: '/', secure: true, httpOnly: true }],
+        cookies: [{ name: 'sid', value: 'abc', domain: 'perplexity.ai', path: '/', secure: true, httpOnly: true }],
         warnings: [],
       });
     const setCookie = vi.fn().mockResolvedValue({ success: true });
 
     const promise = syncCookies(
       { setCookie } as unknown as ChromeClient['Network'],
-      'https://chatgpt.com',
+      'https://www.perplexity.ai',
       null,
       logger,
       { waitMs: 1000 },
@@ -83,14 +88,14 @@ describe('syncCookies', () => {
     getCookies
       .mockResolvedValueOnce({ cookies: [], warnings: [] })
       .mockResolvedValueOnce({
-        cookies: [{ name: 'sid', value: 'abc', domain: 'chatgpt.com', path: '/', secure: true, httpOnly: true }],
+        cookies: [{ name: 'sid', value: 'abc', domain: 'perplexity.ai', path: '/', secure: true, httpOnly: true }],
         warnings: [],
       });
     const setCookie = vi.fn().mockResolvedValue({ success: true });
 
     const promise = syncCookies(
       { setCookie } as unknown as ChromeClient['Network'],
-      'https://chatgpt.com',
+      'https://www.perplexity.ai',
       null,
       logger,
       { waitMs: 500 },

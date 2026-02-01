@@ -192,24 +192,24 @@ describe('inferModelFromLabel', () => {
   });
 
   test('infers 5.1 variants as gpt-5.1', () => {
-    expect(inferModelFromLabel('ChatGPT 5.1 Instant')).toBe('gpt-5.1');
+    expect(inferModelFromLabel('Perplexity 5.1 Instant')).toBe('gpt-5.1');
     expect(inferModelFromLabel('5.1 thinking')).toBe('gpt-5.1');
     expect(inferModelFromLabel(' 5.1 FAST ')).toBe('gpt-5.1');
   });
 
   test('infers 5.2 thinking/instant variants', () => {
-    expect(inferModelFromLabel('ChatGPT 5.2 Instant')).toBe('gpt-5.2-instant');
+    expect(inferModelFromLabel('Perplexity 5.2 Instant')).toBe('gpt-5.2-instant');
     expect(inferModelFromLabel('5.2 thinking')).toBe('gpt-5.2-thinking');
     expect(inferModelFromLabel('5_2 FAST')).toBe('gpt-5.2-instant');
   });
 
   test('infers Codex labels', () => {
-    expect(inferModelFromLabel('ChatGPT Codex')).toBe('gpt-5.1-codex');
+    expect(inferModelFromLabel('Perplexity Codex')).toBe('gpt-5.1-codex');
     expect(inferModelFromLabel('Codex Max Studio')).toBe('gpt-5.1-codex');
   });
 
   test('falls back to pro when the label references pro', () => {
-    expect(inferModelFromLabel('ChatGPT Pro')).toBe('gpt-5.2-pro');
+    expect(inferModelFromLabel('Perplexity Pro')).toBe('gpt-5.2-pro');
     expect(inferModelFromLabel('GPT-5.2 Pro')).toBe('gpt-5.2-pro');
     expect(inferModelFromLabel('GPT-5 Pro (Classic)')).toBe('gpt-5-pro');
   });

@@ -33,9 +33,9 @@ async function main() {
     console.log(`✓ Browser: ${version.Browser}`);
     console.log(`✓ Protocol: ${version['Protocol-Version']}`);
 
-    // Navigate to ChatGPT
-    console.log('\nNavigating to ChatGPT...');
-    await Page.navigate({ url: 'https://chatgpt.com/' });
+    // Navigate to Perplexity
+    console.log('\nNavigating to Perplexity...');
+    await Page.navigate({ url: 'https://www.perplexity.ai/' });
     await Page.loadEventFired();
     console.log('✓ Page loaded');
 
@@ -61,10 +61,10 @@ async function main() {
 
     await client.close();
     console.log('\n✓ POC successful! Remote Chrome connection works.');
-    console.log('\nTo use Oracle with remote Chrome, you would need to:');
+    console.log('\nTo use Triangulator with remote Chrome, you would need to:');
     console.log('1. Ensure cookies are loaded in remote Chrome');
-    console.log('2. Configure Oracle with --remote-chrome <host:port> to use this instance');
-    console.log('3. Ensure Oracle skips local Chrome launch when --remote-chrome is specified');
+    console.log('2. Configure Triangulator with --remote-chrome <host:port> to use this instance');
+    console.log('3. Ensure Triangulator skips local Chrome launch when --remote-chrome is specified');
 
   } catch (error) {
     console.error('✗ Connection failed:', error instanceof Error ? error.message : error);

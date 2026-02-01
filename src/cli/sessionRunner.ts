@@ -167,7 +167,7 @@ export async function performSessionRun({
 
       const multiRunTips: string[] = [];
       if (files.length === 0) {
-        multiRunTips.push('Tip: no files attached — Oracle works best with project context. Add files via --file path/to/code or docs.');
+        multiRunTips.push('Tip: no files attached — Triangulator works best with project context. Add files via --file path/to/code or docs.');
       }
       const shortPrompt = (runOptions.prompt?.trim().length ?? 0) < 80;
       if (shortPrompt) {

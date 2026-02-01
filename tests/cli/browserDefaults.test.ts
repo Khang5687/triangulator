@@ -5,43 +5,43 @@ import type { UserConfig } from '../../src/config.js';
 const source = (_key: keyof BrowserDefaultsOptions) => undefined;
 
 describe('applyBrowserDefaultsFromConfig', () => {
-  test('applies chatgptUrl from user config when flags are absent', () => {
+  test('applies perplexityUrl from user config when flags are absent', () => {
     const options: BrowserDefaultsOptions = {};
     const config: UserConfig = {
       browser: {
-        chatgptUrl: 'https://chatgpt.com/g/g-p-foo/project',
+        perplexityUrl: 'https://www.perplexity.ai/spaces/demo-space',
       },
     };
 
     applyBrowserDefaultsFromConfig(options, config, source);
 
-    expect(options.chatgptUrl).toBe('https://chatgpt.com/g/g-p-foo/project');
+    expect(options.perplexityUrl).toBe('https://www.perplexity.ai/spaces/demo-space');
   });
 
-  test('does not override when CLI provided chatgptUrl', () => {
-    const options: BrowserDefaultsOptions = { chatgptUrl: 'https://override.example.com/' };
+  test('does not override when CLI provided perplexityUrl', () => {
+    const options: BrowserDefaultsOptions = { perplexityUrl: 'https://override.example.com/' };
     const config: UserConfig = {
       browser: {
-        chatgptUrl: 'https://chatgpt.com/g/g-p-foo/project',
+        perplexityUrl: 'https://www.perplexity.ai/spaces/demo-space',
       },
     };
 
     applyBrowserDefaultsFromConfig(options, config, source);
 
-    expect(options.chatgptUrl).toBe('https://override.example.com/');
+    expect(options.perplexityUrl).toBe('https://override.example.com/');
   });
 
-  test('falls back to browser.url when chatgptUrl missing', () => {
+  test('falls back to browser.url when perplexityUrl missing', () => {
     const options: BrowserDefaultsOptions = {};
     const config: UserConfig = {
       browser: {
-        url: 'https://chatgpt.com/g/g-p-bar/project',
+        url: 'https://www.perplexity.ai/spaces/fallback-space',
       },
     };
 
     applyBrowserDefaultsFromConfig(options, config, source);
 
-    expect(options.chatgptUrl).toBe('https://chatgpt.com/g/g-p-bar/project');
+    expect(options.perplexityUrl).toBe('https://www.perplexity.ai/spaces/fallback-space');
   });
 
   test('applies chrome defaults when CLI flags are untouched or defaulted', () => {
@@ -105,14 +105,14 @@ describe('applyBrowserDefaultsFromConfig', () => {
     const config: UserConfig = {
       browser: {
         manualLogin: true,
-        manualLoginProfileDir: '/tmp/oracle-profile',
+        manualLoginProfileDir: '/tmp/triangulator-profile',
       },
     };
 
     applyBrowserDefaultsFromConfig(options, config, (_key) => 'default');
 
     expect(options.browserManualLogin).toBe(true);
-    expect(options.browserManualLoginProfileDir).toBe('/tmp/oracle-profile');
+    expect(options.browserManualLoginProfileDir).toBe('/tmp/triangulator-profile');
   });
 
   test('does not override manual-login when CLI enabled it', () => {

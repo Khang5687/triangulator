@@ -38,7 +38,7 @@ const sessionStoreMock = vi.hoisted(() => ({
   filterSessions: vi.fn(),
   getPaths: vi.fn(),
   readModelLog: vi.fn(),
-  sessionsDir: vi.fn().mockReturnValue('/tmp/.oracle/sessions'),
+  sessionsDir: vi.fn().mockReturnValue('/tmp/.triangulator/sessions'),
 }));
 
 vi.mock('../../src/sessionStore.ts', () => ({
@@ -102,7 +102,7 @@ beforeEach(() => {
     stream: { end: vi.fn() },
   });
   sessionStoreMock.readModelLog.mockResolvedValue('model log body');
-  sessionStoreMock.sessionsDir.mockReturnValue('/tmp/.oracle/sessions');
+  sessionStoreMock.sessionsDir.mockReturnValue('/tmp/.triangulator/sessions');
   vi.spyOn(fsPromises, 'mkdir').mockResolvedValue(undefined);
   vi.spyOn(fsPromises, 'writeFile').mockResolvedValue(undefined);
 });
@@ -578,7 +578,7 @@ describe('performSessionRun', () => {
     (process.stdout as { isTTY?: boolean }).isTTY = false;
 
     const tmpDir = os.tmpdir();
-    const tmpFile = path.join(tmpDir, 'oracle-tip.txt');
+    const tmpFile = path.join(tmpDir, 'triangulator-tip.txt');
     fs.writeFileSync(tmpFile, 'content');
 
     const summary: MultiModelRunSummary = {

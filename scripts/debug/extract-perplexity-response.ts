@@ -17,14 +17,14 @@ async function main() {
 
   for (const page of pages) {
     const url = page.url();
-    if (url.includes('chatgpt.com/c/')) {
+    if (url.includes('perplexity.ai/')) {
       targetPage = page;
       break;
     }
   }
 
   if (!targetPage) {
-    console.error('ChatGPT conversation page not found');
+    console.error('Perplexity page not found');
     process.exit(1);
   }
 
@@ -32,10 +32,12 @@ async function main() {
 
   // Extract the last assistant message
   const content = (await targetPage.evaluate(() => {
-    // Try multiple selectors for ChatGPT's assistant messages
+    // Try multiple selectors for Perplexity's assistant messages
     const selectors = [
       '[data-message-author-role="assistant"] .markdown',
       '[data-message-author-role="assistant"]',
+      '[data-testid*="answer"]',
+      '.answer',
       '.agent-turn .markdown',
       '.agent-turn',
     ];

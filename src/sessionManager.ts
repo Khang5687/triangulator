@@ -7,7 +7,7 @@ import type { BrowserModelStrategy, CookieParam } from './browser/types.js';
 import type { TransportFailureReason, AzureOptions, ModelName, ThinkingTimeLevel } from './oracle.js';
 import { DEFAULT_MODEL, formatElapsed } from './oracle.js';
 import { safeModelSlug } from './oracle/modelResolver.js';
-import { getOracleHomeDir } from './oracleHome.js';
+import { getTriangulatorHomeDir } from './oracleHome.js';
 
 export type SessionMode = 'api' | 'browser';
 
@@ -15,6 +15,8 @@ export interface BrowserSessionConfig {
   chromeProfile?: string | null;
   chromePath?: string | null;
   chromeCookiePath?: string | null;
+  perplexityUrl?: string | null;
+  /** Legacy config key (Oracle). */
   chatgptUrl?: string | null;
   url?: string;
   timeoutMs?: number;
@@ -175,7 +177,7 @@ interface InitializeSessionOptions extends StoredRunOptions {
 }
 
 export function getSessionsDir(): string {
-  return path.join(getOracleHomeDir(), 'sessions');
+  return path.join(getTriangulatorHomeDir(), 'sessions');
 }
 const METADATA_FILENAME = 'meta.json';
 const LEGACY_SESSION_FILENAME = 'session.json';

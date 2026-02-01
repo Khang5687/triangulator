@@ -21,7 +21,7 @@ describe('runBrowserSessionExecution', () => {
         chromePort: 9999,
         chromeHost: '127.0.0.1',
         chromeTargetId: 't-1',
-        tabUrl: 'https://chatgpt.com/c/foo',
+        tabUrl: 'https://www.perplexity.ai/spaces/foo',
       });
       return {
         answerText: 'ok',

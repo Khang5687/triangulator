@@ -18,10 +18,11 @@ export async function runBridgeClaudeConfig(options: BridgeClaudeConfigCliOption
   });
 
   const snippet = formatClaudeMcpConfig({
-    oracleHomeDir: process.env.ORACLE_HOME_DIR ?? path.join(os.homedir(), '.oracle-local'),
+    oracleHomeDir: process.env.TRIANGULATOR_HOME_DIR ?? process.env.ORACLE_HOME_DIR ?? path.join(os.homedir(), '.triangulator-local'),
     browserProfileDir:
+      process.env.TRIANGULATOR_BROWSER_PROFILE_DIR ??
       process.env.ORACLE_BROWSER_PROFILE_DIR ??
-      path.join(os.homedir(), '.oracle-local', 'browser-profile'),
+      path.join(os.homedir(), '.triangulator-local', 'browser-profile'),
     remoteHost: resolved.host,
     remoteToken: resolved.token,
     includeToken: Boolean(options.printToken),
@@ -30,7 +31,7 @@ export async function runBridgeClaudeConfig(options: BridgeClaudeConfigCliOption
   console.log(snippet);
   if (!options.printToken) {
     console.log('');
-    console.log(chalk.dim('Tip: rerun with --print-token to include ORACLE_REMOTE_TOKEN in the snippet.'));
+    console.log(chalk.dim('Tip: rerun with --print-token to include TRIANGULATOR_REMOTE_TOKEN in the snippet.'));
   }
 }
 
@@ -49,17 +50,17 @@ export function formatClaudeMcpConfig({
 }): string {
   const env: Record<string, string> = {};
   // biome-ignore lint/complexity/useLiteralKeys: env vars are uppercase and include underscores.
-  env['ORACLE_ENGINE'] = 'browser';
+  env['TRIANGULATOR_ENGINE'] = 'browser';
   // biome-ignore lint/complexity/useLiteralKeys: env vars are uppercase and include underscores.
-  env['ORACLE_HOME_DIR'] = oracleHomeDir;
+  env['TRIANGULATOR_HOME_DIR'] = oracleHomeDir;
   // biome-ignore lint/complexity/useLiteralKeys: env vars are uppercase and include underscores.
-  env['ORACLE_BROWSER_PROFILE_DIR'] = browserProfileDir;
+  env['TRIANGULATOR_BROWSER_PROFILE_DIR'] = browserProfileDir;
 
   if (remoteHost) {
     // biome-ignore lint/complexity/useLiteralKeys: env vars are uppercase and include underscores.
-    env['ORACLE_REMOTE_HOST'] = remoteHost;
+    env['TRIANGULATOR_REMOTE_HOST'] = remoteHost;
     // biome-ignore lint/complexity/useLiteralKeys: env vars are uppercase and include underscores.
-    env['ORACLE_REMOTE_TOKEN'] = includeToken ? remoteToken ?? '<YOUR_TOKEN>' : '<YOUR_TOKEN>';
+    env['TRIANGULATOR_REMOTE_TOKEN'] = includeToken ? remoteToken ?? '<YOUR_TOKEN>' : '<YOUR_TOKEN>';
   }
 
   // Claude Code supports project-scoped `.mcp.json` config files:
@@ -67,9 +68,9 @@ export function formatClaudeMcpConfig({
   return JSON.stringify(
     {
       mcpServers: {
-        oracle: {
+        triangulator: {
           type: 'stdio',
-          command: 'oracle-mcp',
+          command: 'triangulator-mcp',
           args: [],
           env,
         },

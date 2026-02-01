@@ -6,7 +6,7 @@ import type { BrowserRuntimeMetadata, BrowserSessionConfig } from '../sessionSto
 import {
   waitForAssistantResponse,
   captureAssistantMarkdown,
-  navigateToChatGPT,
+  navigateToPerplexity,
   ensureNotBlocked,
   ensureLoggedIn,
   ensurePromptReady,
@@ -15,7 +15,7 @@ import type { BrowserLogger, ChromeClient } from './types.js';
 import { launchChrome, connectToChrome, hideChromeWindow } from './chromeLifecycle.js';
 import { resolveBrowserConfig } from './config.js';
 import { syncCookies } from './cookies.js';
-import { CHATGPT_URL } from './constants.js';
+import { PERPLEXITY_URL } from './constants.js';
 import { cleanupStaleProfileState } from './profileState.js';
 import {
   pickTarget,
@@ -89,7 +89,7 @@ export async function resumeBrowserSession(
     const ensureConversationOpen = async () => {
       const { result } = await Runtime.evaluate({ expression: 'location.href', returnByValue: true });
       const href = typeof result?.value === 'string' ? result.value : '';
-      if (href.includes('/c/')) {
+      if (href.includes('/spaces/')) {
         const currentId = extractConversationIdFromUrl(href);
         if (!runtime.conversationId || (currentId && currentId === runtime.conversationId)) {
           return;
@@ -105,7 +105,7 @@ export async function resumeBrowserSession(
         15_000,
       );
       if (!opened) {
-        throw new Error('Unable to locate prior ChatGPT conversation in sidebar.');
+        throw new Error('Unable to locate prior Perplexity Space in sidebar.');
       }
       await waitForLocationChange(Runtime, 15_000);
     };
@@ -160,8 +160,8 @@ async function resumeBrowserSessionViaNewChrome(
   const resolved = resolveBrowserConfig(config ?? {});
   const manualLogin = Boolean(resolved.manualLogin);
   const userDataDir = manualLogin
-    ? resolved.manualLoginProfileDir ?? path.join(os.homedir(), '.oracle', 'browser-profile')
-    : await mkdtemp(path.join(os.tmpdir(), 'oracle-reattach-'));
+    ? resolved.manualLoginProfileDir ?? path.join(os.homedir(), '.triangulator', 'browser-profile')
+    : await mkdtemp(path.join(os.tmpdir(), 'triangulator-reattach-'));
   if (manualLogin) {
     await mkdir(userDataDir, { recursive: true });
   }
@@ -191,11 +191,11 @@ async function resumeBrowserSessionViaNewChrome(
     });
   }
 
-  await navigateToChatGPT(Page, Runtime, CHATGPT_URL, logger);
+  await navigateToPerplexity(Page, Runtime, PERPLEXITY_URL, logger);
   await ensureNotBlocked(Runtime, resolved.headless, logger);
   await ensureLoggedIn(Runtime, logger, { appliedCookies });
-  if (resolved.url !== CHATGPT_URL) {
-    await navigateToChatGPT(Page, Runtime, resolved.url, logger);
+  if (resolved.url !== PERPLEXITY_URL) {
+    await navigateToPerplexity(Page, Runtime, resolved.url, logger);
     await ensureNotBlocked(Runtime, resolved.headless, logger);
   }
   await ensurePromptReady(Runtime, resolved.inputTimeoutMs, logger);
@@ -203,7 +203,7 @@ async function resumeBrowserSessionViaNewChrome(
   const conversationUrl = buildConversationUrl(runtime, resolved.url);
   if (conversationUrl) {
     logger(`Reopening conversation at ${conversationUrl}`);
-    await navigateToChatGPT(Page, Runtime, conversationUrl, logger);
+    await navigateToPerplexity(Page, Runtime, conversationUrl, logger);
     await ensureNotBlocked(Runtime, resolved.headless, logger);
     await ensurePromptReady(Runtime, resolved.inputTimeoutMs, logger);
   } else {
@@ -212,14 +212,14 @@ async function resumeBrowserSessionViaNewChrome(
       {
         conversationId: runtime.conversationId ?? extractConversationIdFromUrl(runtime.tabUrl ?? ''),
         preferProjects:
-          resolved.url !== CHATGPT_URL ||
-          Boolean(runtime.tabUrl && (/\/g\//.test(runtime.tabUrl) || runtime.tabUrl.includes('/project'))),
+          resolved.url !== PERPLEXITY_URL ||
+          Boolean(runtime.tabUrl && runtime.tabUrl.includes('/spaces/')),
         promptPreview: deps.promptPreview,
       },
       15_000,
     );
     if (!opened) {
-      throw new Error('Unable to locate prior ChatGPT conversation in sidebar.');
+      throw new Error('Unable to locate prior Perplexity Space in sidebar.');
     }
     await waitForLocationChange(Runtime, 15_000);
   }

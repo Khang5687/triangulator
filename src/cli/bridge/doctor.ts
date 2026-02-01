@@ -29,7 +29,7 @@ export async function runBridgeDoctor(_options: BridgeDoctorCliOptions): Promise
   lines.push(chalk.bold('Bridge doctor'));
   lines.push(chalk.dim(`OS: ${process.platform} ${os.release()} (${process.arch})`));
   lines.push(chalk.dim(`Node: ${process.version}`));
-  lines.push(chalk.dim(`Oracle: ${version}`));
+  lines.push(chalk.dim(`Triangulator: ${version}`));
   lines.push(chalk.dim(`Config: ${loaded ? configPath : '(missing)'}`));
   if (userConfig.engine) {
     lines.push(chalk.dim(`Default engine: ${userConfig.engine}`));
@@ -55,11 +55,11 @@ export async function runBridgeDoctor(_options: BridgeDoctorCliOptions): Promise
     }
 
     if (!resolvedRemote.token) {
-      fail.push('Remote token is missing. Run `oracle bridge client --connect <...> --write-config` or set ORACLE_REMOTE_TOKEN.');
+      fail.push('Remote token is missing. Run `triangulator bridge client --connect <...> --write-config` or set TRIANGULATOR_REMOTE_TOKEN.');
     } else if (tcp.ok) {
       const health = await checkRemoteHealth({ host: resolvedRemote.host, token: resolvedRemote.token, timeoutMs: 5000 });
       if (health.ok) {
-        const meta = health.version ? `oracle ${health.version}` : 'ok';
+        const meta = health.version ? `triangulator ${health.version}` : 'ok';
         lines.push(chalk.dim(`Auth (/health): ${chalk.green(meta)}`));
       } else {
         const detail = health.error ?? 'unknown error';
@@ -115,4 +115,3 @@ export async function runBridgeDoctor(_options: BridgeDoctorCliOptions): Promise
 
   process.exitCode = fail.length ? 1 : 0;
 }
-

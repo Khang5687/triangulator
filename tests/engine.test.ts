@@ -5,6 +5,8 @@ import { resolveEngine, defaultWaitPreference, type EngineMode } from '../src/cl
 const envWithKey = { ...process.env, OPENAI_API_KEY: 'sk-test' } as NodeJS.ProcessEnv;
 const envWithoutKey = { ...process.env } as NodeJS.ProcessEnv;
 delete envWithoutKey.OPENAI_API_KEY;
+delete envWithKey.TRIANGULATOR_ENGINE;
+delete envWithoutKey.TRIANGULATOR_ENGINE;
 delete envWithKey.ORACLE_ENGINE;
 delete envWithoutKey.ORACLE_ENGINE;
 
@@ -19,18 +21,18 @@ describe('resolveEngine', () => {
     expect(engine).toBe<EngineMode>('browser');
   });
 
-  it('respects ORACLE_ENGINE=browser even when OPENAI_API_KEY is set', () => {
+  it('respects TRIANGULATOR_ENGINE=browser even when OPENAI_API_KEY is set', () => {
     const env = { ...envWithKey } as NodeJS.ProcessEnv;
     // biome-ignore lint/complexity/useLiteralKeys: env var names are uppercase with underscores
-    env['ORACLE_ENGINE'] = 'browser';
+    env['TRIANGULATOR_ENGINE'] = 'browser';
     const engine = resolveEngine({ engine: undefined, browserFlag: false, env });
     expect(engine).toBe<EngineMode>('browser');
   });
 
-  it('respects ORACLE_ENGINE=api even without OPENAI_API_KEY', () => {
+  it('respects TRIANGULATOR_ENGINE=api even without OPENAI_API_KEY', () => {
     const env = { ...envWithoutKey } as NodeJS.ProcessEnv;
     // biome-ignore lint/complexity/useLiteralKeys: env var names are uppercase with underscores
-    env['ORACLE_ENGINE'] = 'api';
+    env['TRIANGULATOR_ENGINE'] = 'api';
     const engine = resolveEngine({ engine: undefined, browserFlag: false, env });
     expect(engine).toBe<EngineMode>('api');
   });

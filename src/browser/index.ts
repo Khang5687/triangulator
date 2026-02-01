@@ -15,7 +15,7 @@ import {
 } from './chromeLifecycle.js';
 import { syncCookies } from './cookies.js';
 import {
-  navigateToChatGPT,
+  navigateToPerplexity,
   navigateToPromptReadyWithFallback,
   ensureNotBlocked,
   ensureLoggedIn,
@@ -36,7 +36,7 @@ import { uploadAttachmentViaDataTransfer } from './actions/remoteFileTransfer.js
 import { ensureThinkingTime } from './actions/thinkingTime.js';
 import { estimateTokenCount, withRetries, delay } from './utils.js';
 import { formatElapsed } from '../oracle/format.js';
-import { CHATGPT_URL, CONVERSATION_TURN_SELECTOR, DEFAULT_MODEL_STRATEGY } from './constants.js';
+import { PERPLEXITY_URL, CONVERSATION_TURN_SELECTOR, DEFAULT_MODEL_STRATEGY } from './constants.js';
 import type { LaunchedChrome } from 'chrome-launcher';
 import { BrowserAutomationError } from '../oracle/errors.js';
 import { alignPromptEchoPair, buildPromptEchoMatcher } from './reattachHelpers.js';
@@ -51,8 +51,8 @@ import {
 } from './profileState.js';
 
 export type { BrowserAutomationConfig, BrowserRunOptions, BrowserRunResult } from './types.js';
-export { CHATGPT_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET } from './constants.js';
-export { parseDuration, delay, normalizeChatgptUrl, isTemporaryChatUrl } from './utils.js';
+export { PERPLEXITY_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET } from './constants.js';
+export { parseDuration, delay, normalizePerplexityUrl } from './utils.js';
 
 export async function runBrowserMode(options: BrowserRunOptions): Promise<BrowserRunResult> {
   const promptText = options.prompt?.trim();
@@ -78,7 +78,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     if (!runtimeHintCb || !chrome?.port) {
       return;
     }
-    const conversationId = lastUrl ? extractConversationIdFromUrl(lastUrl) : undefined;
+    const conversationId = lastUrl ? extractSpaceIdFromUrl(lastUrl) : undefined;
     const hint = {
       chromePid: chrome.pid,
       chromePort: chrome.port,
@@ -96,7 +96,11 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       logger(`Failed to persist runtime hint: ${message}`);
     }
   };
-  if (config.debug || process.env.CHATGPT_DEVTOOLS_TRACE === '1') {
+  const devtoolsTraceEnabled =
+    config.debug ||
+    process.env.TRIANGULATOR_DEVTOOLS_TRACE === '1' ||
+    (process.env.TRIANGULATOR_DEVTOOLS_TRACE ?? process.env.ORACLE_DEVTOOLS_TRACE) === '1';
+  if (devtoolsTraceEnabled) {
     logger(
       `[browser-mode] config: ${JSON.stringify({
         ...config,
@@ -130,10 +134,10 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
   const manualLogin = Boolean(config.manualLogin);
   const manualProfileDir = config.manualLoginProfileDir
     ? path.resolve(config.manualLoginProfileDir)
-    : path.join(os.homedir(), '.oracle', 'browser-profile');
+    : path.join(os.homedir(), '.triangulator', 'browser-profile');
   const userDataDir = manualLogin
     ? manualProfileDir
-    : await mkdtemp(path.join(await resolveUserDataBaseDir(), 'oracle-browser-'));
+    : await mkdtemp(path.join(await resolveUserDataBaseDir(), 'triangulator-browser-'));
   if (manualLogin) {
     // Learned: manual login reuses a persistent profile so cookies/SSO survive.
     await mkdir(userDataDir, { recursive: true });
@@ -201,7 +205,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       client?.on('disconnect', () => {
         connectionClosedUnexpectedly = true;
         logger('Chrome window closed; attempting to abort run.');
-        reject(new Error('Chrome window closed before oracle finished. Please keep it open until completion.'));
+        reject(new Error('Chrome window closed before triangulator finished. Please keep it open until completion.'));
       });
     });
     const raceWithDisconnect = <T>(promise: Promise<T>): Promise<T> =>
@@ -265,29 +269,29 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     }
 
     if (cookieSyncEnabled && !manualLogin && (appliedCookies ?? 0) === 0 && !config.inlineCookies) {
-      // Learned: if the profile has no ChatGPT cookies, browser mode will just bounce to login.
+      // Learned: if the profile has no Perplexity cookies, browser mode will just bounce to login.
       // Fail early so the user knows to sign in.
       throw new BrowserAutomationError(
-        'No ChatGPT cookies were applied from your Chrome profile; cannot proceed in browser mode. ' +
-          'Make sure ChatGPT is signed in in the selected profile, use --browser-manual-login / inline cookies, ' +
+        'No Perplexity cookies were applied from your Chrome profile; cannot proceed in browser mode. ' +
+          'Make sure Perplexity is signed in in the selected profile, use --browser-manual-login / inline cookies, ' +
           'or retry with --browser-cookie-wait 5s if Keychain prompts are slow.',
         {
           stage: 'execute-browser',
           details: {
             profile: config.chromeProfile ?? 'Default',
             cookiePath: config.chromeCookiePath ?? null,
-            hint: 'If macOS Keychain prompts or denies access, run oracle from a GUI session or use --copy/--render for the manual flow.',
+            hint: 'If macOS Keychain prompts or denies access, run triangulator from a GUI session or use --copy/--render for the manual flow.',
           },
         },
       );
     }
 
-    const baseUrl = CHATGPT_URL;
-    // First load the base ChatGPT homepage to satisfy potential interstitials,
+    const baseUrl = PERPLEXITY_URL;
+    // First load the base Perplexity homepage to satisfy potential interstitials,
     // then hop to the requested URL if it differs.
-    await raceWithDisconnect(navigateToChatGPT(Page, Runtime, baseUrl, logger));
+    await raceWithDisconnect(navigateToPerplexity(Page, Runtime, baseUrl, logger));
     await raceWithDisconnect(ensureNotBlocked(Runtime, config.headless, logger));
-    // Learned: login checks must happen on the base domain before jumping into project URLs.
+    // Learned: login checks must happen on the base domain before jumping into Spaces URLs.
     await raceWithDisconnect(
       waitForLogin({ runtime: Runtime, logger, appliedCookies, manualLogin, timeoutMs: config.timeoutMs }),
     );
@@ -349,7 +353,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       while (Date.now() - start < timeoutMs) {
         try {
           const { result } = await Runtime.evaluate({ expression: 'location.href', returnByValue: true });
-          if (typeof result?.value === 'string' && result.value.includes('/c/')) {
+          if (typeof result?.value === 'string' && result.value.includes('/spaces/')) {
             lastUrl = result.value;
             logger(`[browser] conversation url (${label}) = ${lastUrl}`);
             await emitRuntimeHint();
@@ -366,7 +370,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       if (conversationHintInFlight) {
         return;
       }
-      // Learned: the /c/ URL can update after the answer; emit hints in the background.
+      // Learned: the Spaces URL can update after the answer; emit hints in the background.
       // Run in the background so prompt submission/streaming isn't blocked by slow URL updates.
       conversationHintInFlight = updateConversationHint(label, timeoutMs)
         .catch(() => false)
@@ -396,7 +400,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         const base = error instanceof Error ? error.message : String(error);
         const hint =
           appliedCookies === 0
-            ? ' No cookies were applied; log in to ChatGPT in Chrome or provide inline cookies (--browser-inline-cookies[(-file)] or ORACLE_BROWSER_COOKIES_JSON).'
+            ? ' No cookies were applied; log in to Perplexity in Chrome or provide inline cookies (--browser-inline-cookies[(-file)] or TRIANGULATOR_BROWSER_COOKIES_JSON).'
             : '';
         throw new Error(`${base}${hint}`);
       });
@@ -497,7 +501,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           logger('Verified attachments present on sent user message');
         }
       }
-      // Reattach needs a /c/ URL; ChatGPT can update it late, so poll in the background.
+      // Reattach needs a Spaces URL; it can update late, so poll in the background.
       scheduleConversationHint('post-submit', config.timeoutMs ?? 120_000);
       return { baselineTurns, baselineAssistantText };
     };
@@ -736,19 +740,19 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     const socketClosed = connectionClosedUnexpectedly || isWebSocketClosureError(normalizedError);
     connectionClosedUnexpectedly = connectionClosedUnexpectedly || socketClosed;
     if (!socketClosed) {
-      logger(`Failed to complete ChatGPT run: ${normalizedError.message}`);
-      if ((config.debug || process.env.CHATGPT_DEVTOOLS_TRACE === '1') && normalizedError.stack) {
+      logger(`Failed to complete Perplexity run: ${normalizedError.message}`);
+      if (devtoolsTraceEnabled && normalizedError.stack) {
         logger(normalizedError.stack);
       }
       throw normalizedError;
     }
-    if ((config.debug || process.env.CHATGPT_DEVTOOLS_TRACE === '1') && normalizedError.stack) {
+    if (devtoolsTraceEnabled && normalizedError.stack) {
       logger(`Chrome window closed before completion: ${normalizedError.message}`);
       logger(normalizedError.stack);
     }
     await emitRuntimeHint();
     throw new BrowserAutomationError(
-      'Chrome window closed before oracle finished. Please keep it open until completion.',
+      'Chrome window closed before triangulator finished. Please keep it open until completion.',
       {
         stage: 'connection-lost',
         runtime: {
@@ -888,14 +892,14 @@ async function waitForLogin({
       const now = Date.now();
       if (now - lastNotice > 5000) {
         logger(
-          'Manual login mode: please sign into chatgpt.com in the opened Chrome window; waiting for session to appear...',
+          'Manual login mode: please sign into perplexity.ai in the opened Chrome window; waiting for session to appear...',
         );
         lastNotice = now;
       }
       await delay(1000);
     }
   }
-  throw new Error('Manual login mode timed out waiting for ChatGPT session; please sign in and retry.');
+  throw new Error('Manual login mode timed out waiting for Perplexity session; please sign in and retry.');
 }
 
 async function maybeRecoverLongAssistantResponse({
@@ -963,7 +967,7 @@ async function _assertNavigatedToHttp(
     }
     await delay(250);
   }
-  throw new BrowserAutomationError('ChatGPT session not detected; page never left new tab.', {
+  throw new BrowserAutomationError('Perplexity session not detected; page never left new tab.', {
     stage: 'execute-browser',
     details: { url: lastUrl || '(empty)' },
   });
@@ -977,7 +981,7 @@ async function maybeReuseRunningChrome(userDataDir: string, logger: BrowserLogge
   if (!probe.ok) {
     logger(`DevToolsActivePort found for ${userDataDir} but unreachable (${probe.error}); launching new Chrome.`);
     // Safe cleanup: remove stale DevToolsActivePort; only remove lock files if this was an Oracle-owned pid that died.
-    await cleanupStaleProfileState(userDataDir, logger, { lockRemovalMode: 'if_oracle_pid_dead' });
+    await cleanupStaleProfileState(userDataDir, logger, { lockRemovalMode: 'if_triangulator_pid_dead' });
     return null;
   }
 
@@ -1055,7 +1059,7 @@ async function runRemoteBrowserMode(
     // Skip cookie sync for remote Chrome - it already has cookies
     logger('Skipping cookie sync for remote Chrome (using existing session)');
 
-    await navigateToChatGPT(Page, Runtime, config.url, logger);
+    await navigateToPerplexity(Page, Runtime, config.url, logger);
     await ensureNotBlocked(Runtime, config.headless, logger);
     await ensureLoggedIn(Runtime, logger, { remoteSession: true });
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
@@ -1343,8 +1347,8 @@ async function runRemoteBrowserMode(
     connectionClosedUnexpectedly = connectionClosedUnexpectedly || socketClosed;
 
     if (!socketClosed) {
-      logger(`Failed to complete ChatGPT run: ${normalizedError.message}`);
-      if ((config.debug || process.env.CHATGPT_DEVTOOLS_TRACE === '1') && normalizedError.stack) {
+      logger(`Failed to complete Perplexity run: ${normalizedError.message}`);
+      if (devtoolsTraceEnabled && normalizedError.stack) {
         logger(normalizedError.stack);
       }
       throw normalizedError;
@@ -1380,7 +1384,7 @@ export { estimateTokenCount } from './utils.js';
 export { resolveBrowserConfig, DEFAULT_BROWSER_CONFIG } from './config.js';
 export { syncCookies } from './cookies.js';
 export {
-  navigateToChatGPT,
+  navigateToPerplexity,
   ensureNotBlocked,
   ensurePromptReady,
   ensureModelSelection,
@@ -1571,7 +1575,7 @@ function describeDevtoolsFirewallHint(host: string, port: number): string | null
     `New-NetFirewallRule -DisplayName 'Chrome DevTools ${port}' -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${port}`,
     "New-NetFirewallRule -DisplayName 'Chrome DevTools (chrome.exe)' -Direction Inbound -Action Allow -Program 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' -Protocol TCP",
     '',
-    'Re-run the same oracle command after adding the rule.',
+    'Re-run the same triangulator command after adding the rule.',
   ].join('\n');
 }
 
@@ -1581,8 +1585,8 @@ function isWsl(): boolean {
   return os.release().toLowerCase().includes('microsoft');
 }
 
-function extractConversationIdFromUrl(url: string): string | undefined {
-  const match = url.match(/\/c\/([a-zA-Z0-9-]+)/);
+function extractSpaceIdFromUrl(url: string): string | undefined {
+  const match = url.match(/\/spaces\/([a-zA-Z0-9-]+)/);
   return match?.[1];
 }
 

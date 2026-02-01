@@ -2,16 +2,18 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { ptyAvailable, runOracleTuiWithPty } from '../util/pty.js';
+import { ptyAvailable, runTriangulatorTuiWithPty } from '../util/pty.js';
 
-const LIVE = process.env.ORACLE_LIVE_TEST === '1' && Boolean(process.env.OPENAI_API_KEY);
+const LIVE =
+  (process.env.TRIANGULATOR_LIVE_TEST === '1' || process.env.ORACLE_LIVE_TEST === '1') &&
+  Boolean(process.env.OPENAI_API_KEY);
 const liveDescribe = LIVE && ptyAvailable ? describe : describe.skip;
 
 liveDescribe('live TUI flow (API multi-model)', () => {
   it(
-    'runs ask-oracle via TUI, selects an extra model, and writes a session',
+    'runs ask-triangulator via TUI, selects an extra model, and writes a session',
     async () => {
-      const homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'oracle-tui-live-'));
+      const homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'triangulator-tui-live-'));
       // Preseed a session so the TUI has something to display even if the live run is interrupted early.
       const seededId = 'preseed-live';
       const sessionDir = path.join(homeDir, 'sessions', seededId);
@@ -30,7 +32,7 @@ liveDescribe('live TUI flow (API multi-model)', () => {
       await fs.writeFile(path.join(sessionDir, 'request.json'), JSON.stringify({ prompt: 'seed' }));
       await fs.writeFile(path.join(sessionDir, 'output.log'), 'seeded log', 'utf8');
 
-      const { output, exitCode, homeDir: usedHome } = await runOracleTuiWithPty({
+      const { output, exitCode, homeDir: usedHome } = await runTriangulatorTuiWithPty({
         steps: [
           { match: 'Paste your prompt text', write: 'Live TUI multi-model smoke\n' },
           { match: 'Engine', write: '\r' }, // accept default API

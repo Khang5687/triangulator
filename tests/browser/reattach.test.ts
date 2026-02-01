@@ -20,7 +20,7 @@ describe('resumeBrowserSession', () => {
       chromePort: 51559,
       chromeHost: '127.0.0.1',
       chromeTargetId: 'target-1',
-      tabUrl: 'https://chatgpt.com/c/abc',
+      tabUrl: 'https://www.perplexity.ai/spaces/abc',
     };
     const listTargets = vi.fn(async () =>
       [
@@ -72,7 +72,7 @@ describe('resumeBrowserSession', () => {
 
   test('falls back to recovery when chrome port is missing', async () => {
     const runtime = {
-      tabUrl: 'https://chatgpt.com/c/abc',
+      tabUrl: 'https://www.perplexity.ai/spaces/abc',
     };
     const recoverSession = vi.fn(async () => ({
       answerText: 'fallback',
@@ -113,25 +113,30 @@ describe('reattach helpers', () => {
   type EvaluateResult<T> = { result: { value: T } };
 
   test('extracts conversation id from a chat URL', () => {
-    expect(extractConversationIdFromUrl('https://chatgpt.com/c/abc-123')).toBe('abc-123');
+    expect(extractConversationIdFromUrl('https://www.perplexity.ai/spaces/abc-123')).toBe('abc-123');
     expect(extractConversationIdFromUrl('')).toBeUndefined();
   });
 
   test('builds conversation URL from tabUrl or conversationId', () => {
     expect(
-      buildConversationUrl({ tabUrl: 'https://chatgpt.com/c/live', conversationId: 'ignored' }, 'https://chatgpt.com/'),
-    ).toBe('https://chatgpt.com/c/live');
-    expect(buildConversationUrl({ conversationId: 'abc' }, 'https://chatgpt.com/')).toBe('https://chatgpt.com/c/abc');
+      buildConversationUrl(
+        { tabUrl: 'https://www.perplexity.ai/spaces/live', conversationId: 'ignored' },
+        'https://www.perplexity.ai/',
+      ),
+    ).toBe('https://www.perplexity.ai/spaces/live');
+    expect(buildConversationUrl({ conversationId: 'abc' }, 'https://www.perplexity.ai/')).toBe(
+      'https://www.perplexity.ai/spaces/abc',
+    );
   });
 
   test('pickTarget prefers chromeTargetId, then tabUrl, then first page', () => {
     const targets = [
-      { targetId: 't-1', type: 'page', url: 'https://chatgpt.com/c/first' },
-      { targetId: 't-2', type: 'page', url: 'https://chatgpt.com/c/second' },
+      { targetId: 't-1', type: 'page', url: 'https://www.perplexity.ai/spaces/first' },
+      { targetId: 't-2', type: 'page', url: 'https://www.perplexity.ai/spaces/second' },
       { targetId: 't-3', type: 'page', url: 'about:blank' },
     ];
     expect(pickTarget(targets, { chromeTargetId: 't-2' })).toEqual(targets[1]);
-    expect(pickTarget(targets, { tabUrl: 'https://chatgpt.com/c/first' })).toEqual(targets[0]);
+    expect(pickTarget(targets, { tabUrl: 'https://www.perplexity.ai/spaces/first' })).toEqual(targets[0]);
     expect(pickTarget(targets, {})).toEqual(targets[0]);
   });
 
@@ -139,7 +144,7 @@ describe('reattach helpers', () => {
     const evaluate = vi.fn<
       (params: EvaluateParams) => Promise<EvaluateResult<{ ok: boolean; href?: string; count: number }>>
     >(async () => ({
-      result: { value: { ok: true, href: 'https://chatgpt.com/c/abc', count: 3 } },
+      result: { value: { ok: true, href: 'https://www.perplexity.ai/spaces/abc', count: 3 } },
     }));
     const runtime = { evaluate } as unknown as ChromeClient['Runtime'];
 

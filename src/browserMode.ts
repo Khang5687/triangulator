@@ -6,10 +6,9 @@ export type {
 
 export {
   runBrowserMode,
-  CHATGPT_URL,
+  PERPLEXITY_URL,
   DEFAULT_MODEL_STRATEGY,
   DEFAULT_MODEL_TARGET,
   parseDuration,
-  normalizeChatgptUrl,
-  isTemporaryChatUrl,
+  normalizePerplexityUrl,
 } from './browser/index.js';

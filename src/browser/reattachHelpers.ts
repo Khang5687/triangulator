@@ -40,7 +40,7 @@ export function pickTarget(
 
 export function extractConversationIdFromUrl(url: string): string | undefined {
   if (!url) return undefined;
-  const match = url.match(/\/c\/([a-zA-Z0-9-]+)/);
+  const match = url.match(/\/spaces\/([a-zA-Z0-9-]+)/) ?? url.match(/\/c\/([a-zA-Z0-9-]+)/);
   return match?.[1];
 }
 
@@ -49,6 +49,9 @@ export function buildConversationUrl(
   baseUrl: string,
 ): string | null {
   if (runtime.tabUrl) {
+    if (runtime.tabUrl.includes('/spaces/')) {
+      return runtime.tabUrl;
+    }
     if (runtime.tabUrl.includes('/c/')) {
       return runtime.tabUrl;
     }
@@ -62,7 +65,8 @@ export function buildConversationUrl(
     const base = new URL(baseUrl);
     const pathRoot = base.pathname.replace(/\/$/, '');
     const prefix = pathRoot === '/' ? '' : pathRoot;
-    return `${base.origin}${prefix}/c/${conversationId}`;
+    const spacePath = base.hostname.includes('perplexity.ai') ? '/spaces' : '/c';
+    return `${base.origin}${prefix}${spacePath}/${conversationId}`;
   } catch {
     return null;
   }
@@ -96,10 +100,10 @@ export async function openConversationFromSidebar(
       const promptNeedles = Array.from(new Set([promptNeedleFull, promptNeedleShort].filter(Boolean)));
       const nav = document.querySelector('nav') || document.querySelector('aside') || document.body;
       if (preferProjects) {
-        const projectLink = Array.from(nav.querySelectorAll('a,button'))
-          .find((el) => (el.textContent || '').trim().toLowerCase() === 'projects');
-        if (projectLink) {
-          projectLink.click();
+        const spaceLink = Array.from(nav.querySelectorAll('a,button'))
+          .find((el) => (el.textContent || '').trim().toLowerCase() === 'spaces');
+        if (spaceLink) {
+          spaceLink.click();
         }
       }
       const allElements = Array.from(
@@ -175,7 +179,7 @@ export async function openConversationFromSidebar(
         target.clickable.dispatchEvent(
           new MouseEvent('click', { bubbles: true, cancelable: true, view: window }),
         );
-        // Fallback: some project-sidebar items don't navigate on click, force the URL.
+        // Fallback: some sidebar items don't navigate on click, force the URL.
         if (target.href && target.href.includes('/c/')) {
           const targetUrl = target.href.startsWith('http')
             ? target.href
@@ -206,7 +210,7 @@ export async function openConversationFromSidebarWithRetry(
   const start = Date.now();
   let attempt = 0;
   while (Date.now() - start < timeoutMs) {
-    // Retry because project list can hydrate after initial navigation.
+    // Retry because the Spaces list can hydrate after initial navigation.
     const opened = await openConversationFromSidebar(Runtime, options, attempt);
     if (opened) {
       if (options.promptPreview) {

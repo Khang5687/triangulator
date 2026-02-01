@@ -50,7 +50,8 @@ export function ensureBrowserAvailable(engine: EngineMode, options?: { remoteHos
   if (engine !== 'browser') {
     return null;
   }
-  const remoteHost = options?.remoteHost?.trim() || process.env.ORACLE_REMOTE_HOST?.trim();
+  const remoteHost =
+    options?.remoteHost?.trim() || process.env.TRIANGULATOR_REMOTE_HOST?.trim() || process.env.ORACLE_REMOTE_HOST?.trim();
   if (remoteHost) {
     return null;
   }

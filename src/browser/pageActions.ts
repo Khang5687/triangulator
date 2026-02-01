@@ -1,5 +1,5 @@
 export {
-  navigateToChatGPT,
+  navigateToPerplexity,
   navigateToPromptReadyWithFallback,
   ensureNotBlocked,
   ensureLoggedIn,

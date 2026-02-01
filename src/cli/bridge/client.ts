@@ -34,7 +34,7 @@ export async function runBridgeClient(options: BridgeClientCliOptions): Promise<
       const suffix = health.statusCode ? ` (HTTP ${health.statusCode})` : '';
       throw new Error(`Remote service health check failed: ${health.error ?? 'unknown error'}${suffix}`);
     }
-    console.log(chalk.green(`Remote service OK (${remoteHost})${health.version ? ` — oracle ${health.version}` : ''}`));
+    console.log(chalk.green(`Remote service OK (${remoteHost})${health.version ? ` — triangulator ${health.version}` : ''}`));
   }
 
   const configFilePath = options.config?.trim() || defaultConfigPath();
@@ -59,14 +59,14 @@ export async function runBridgeClient(options: BridgeClientCliOptions): Promise<
 
   console.log('');
   console.log('Next:');
-  console.log(chalk.dim(`- oracle --engine browser -p "hello" --file README.md`));
+  console.log(chalk.dim(`- triangulator --engine browser -p "hello" --file README.md`));
 
   if (options.printEnv) {
     console.log('');
     console.log('# Optional env overrides (paste into your shell):');
-    console.log(`export ORACLE_ENGINE=browser`);
-    console.log(`export ORACLE_REMOTE_HOST=${shellQuote(remoteHost)}`);
-    console.log(`export ORACLE_REMOTE_TOKEN=${shellQuote(remoteToken)}`);
+    console.log(`export TRIANGULATOR_ENGINE=browser`);
+    console.log(`export TRIANGULATOR_REMOTE_HOST=${shellQuote(remoteHost)}`);
+    console.log(`export TRIANGULATOR_REMOTE_TOKEN=${shellQuote(remoteToken)}`);
   }
 }
 

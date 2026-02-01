@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { finished } from 'node:stream/promises';
-import { setOracleHomeDirOverrideForTest } from '../src/oracleHome.js';
+import { setTriangulatorHomeDirOverrideForTest } from '../src/oracleHome.js';
 import { sessionStore as store } from '../src/sessionStore.js';
 
 describe('sessionStore', () => {
@@ -11,12 +11,12 @@ describe('sessionStore', () => {
 
   beforeEach(async () => {
     tmpHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-store-'));
-    setOracleHomeDirOverrideForTest(tmpHome);
+    setTriangulatorHomeDirOverrideForTest(tmpHome);
     await store.ensureStorage();
   });
 
   afterEach(async () => {
-    setOracleHomeDirOverrideForTest(null);
+    setTriangulatorHomeDirOverrideForTest(null);
     await rm(tmpHome, { recursive: true, force: true });
   });
 

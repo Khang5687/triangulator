@@ -69,7 +69,7 @@ export function parseBridgeConnectionString(input: string): { remoteHost: string
 
   let url: URL;
   try {
-    url = raw.includes('://') ? new URL(raw) : new URL(`oracle+tcp://${raw}`);
+    url = raw.includes('://') ? new URL(raw) : new URL(`triangulator+tcp://${raw}`);
   } catch (error) {
     throw new Error(`Invalid connection string: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -94,7 +94,7 @@ export function formatBridgeConnectionString(
   options: { includeToken?: boolean } = {},
 ): string {
   const { hostname, port } = parseHostPort(connection.remoteHost);
-  const base = `oracle+tcp://${normalizeHostPort(hostname, port)}`;
+  const base = `triangulator+tcp://${normalizeHostPort(hostname, port)}`;
   if (!options.includeToken) {
     return base;
   }

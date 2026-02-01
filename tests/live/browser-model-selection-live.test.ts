@@ -4,22 +4,21 @@ import type { BrowserLogger } from '../../src/browser/types.js';
 import { getCookies } from '@steipete/sweet-cookie';
 import { acquireLiveTestLock, releaseLiveTestLock } from './liveLock.js';
 
-const LIVE = process.env.ORACLE_LIVE_TEST === '1';
+const LIVE = process.env.TRIANGULATOR_LIVE_TEST === '1' || process.env.ORACLE_LIVE_TEST === '1';
 
-async function hasChatGptCookies(): Promise<boolean> {
+async function hasPerplexityCookies(): Promise<boolean> {
   const { cookies } = await getCookies({
-    url: 'https://chatgpt.com',
-    origins: ['https://chatgpt.com', 'https://chat.openai.com', 'https://atlas.openai.com'],
+    url: 'https://www.perplexity.ai',
+    origins: ['https://www.perplexity.ai'],
     browsers: ['chrome'],
     mode: 'merge',
     chromeProfile: 'Default',
     timeoutMs: 5_000,
   });
-  // Learned: ChatGPT session token is the most reliable "logged in" signal for live browser tests.
-  const hasSession = cookies.some((cookie) => cookie.name.startsWith('__Secure-next-auth.session-token'));
+  const hasSession = cookies.length > 0;
   if (!hasSession) {
     console.warn(
-      'Skipping ChatGPT browser live tests (missing __Secure-next-auth.session-token). Open chatgpt.com in Chrome and retry.',
+      'Skipping Perplexity browser live tests (missing cookies). Open perplexity.ai in Chrome and retry.',
     );
     return false;
   }
@@ -56,13 +55,13 @@ const CASES = [
   },
 ];
 
-(LIVE ? describe : describe.skip)('ChatGPT browser live model selection', () => {
+(LIVE ? describe : describe.skip)('Perplexity browser live model selection', () => {
   test(
     'selects GPT-5.2 variants reliably',
     async () => {
-      if (!(await hasChatGptCookies())) return;
+      if (!(await hasPerplexityCookies())) return;
       // Learned: serialize live browser tests to avoid Chrome profile contention.
-      await acquireLiveTestLock('chatgpt-browser');
+      await acquireLiveTestLock('perplexity-browser');
       try {
         for (const entry of CASES) {
           for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -103,7 +102,7 @@ const CASES = [
                 break;
               }
               const transient =
-                message.includes('Chrome window closed before oracle finished') ||
+                message.includes('Chrome window closed before triangulator finished') ||
                 message.includes('Prompt did not appear in conversation before timeout') ||
                 message.includes('Reattach target did not respond');
               if (transient && attempt < 3) {
@@ -116,7 +115,7 @@ const CASES = [
           }
         }
       } finally {
-        await releaseLiveTestLock('chatgpt-browser');
+        await releaseLiveTestLock('perplexity-browser');
       }
     },
     15 * 60 * 1000,

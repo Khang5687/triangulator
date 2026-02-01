@@ -6,13 +6,13 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const CLI_ENTRY = path.join(process.cwd(), 'bin', 'oracle-cli.ts');
+const CLI_ENTRY = path.join(process.cwd(), 'bin', 'triangulator-cli.ts');
 const CLIENT_FACTORY = path.join(process.cwd(), 'tests', 'fixtures', 'mockClientFactory.cjs');
 const INTEGRATION_TIMEOUT = process.platform === 'win32' ? 60000 : 30000;
 
-describe('oracle CLI integration', () => {
+describe('triangulator CLI integration', () => {
   test('stores session metadata using stubbed client factory', async () => {
-    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-home-'));
+    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'triangulator-home-'));
     const testFile = path.join(oracleHome, 'notes.md');
     await writeFile(testFile, 'Integration dry run content', 'utf8');
 
@@ -21,13 +21,13 @@ describe('oracle CLI integration', () => {
       // biome-ignore lint/style/useNamingConvention: env var name
       OPENAI_API_KEY: 'sk-integration',
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_HOME_DIR: oracleHome,
+      TRIANGULATOR_HOME_DIR: oracleHome,
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_CLIENT_FACTORY: CLIENT_FACTORY,
+      TRIANGULATOR_CLIENT_FACTORY: CLIENT_FACTORY,
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_NO_DETACH: '1',
+      TRIANGULATOR_NO_DETACH: '1',
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_DISABLE_KEYTAR: '1',
+      TRIANGULATOR_DISABLE_KEYTAR: '1',
     };
 
     await execFileAsync(
@@ -60,17 +60,17 @@ describe('oracle CLI integration', () => {
   }, INTEGRATION_TIMEOUT);
 
   test('rejects mixing --model and --models regardless of source', async () => {
-    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-multi-conflict-'));
+    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'triangulator-multi-conflict-'));
     const env = {
       ...process.env,
       // biome-ignore lint/style/useNamingConvention: env var name
       OPENAI_API_KEY: 'sk-integration',
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_HOME_DIR: oracleHome,
+      TRIANGULATOR_HOME_DIR: oracleHome,
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_CLIENT_FACTORY: CLIENT_FACTORY,
+      TRIANGULATOR_CLIENT_FACTORY: CLIENT_FACTORY,
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_DISABLE_KEYTAR: '1',
+      TRIANGULATOR_DISABLE_KEYTAR: '1',
     };
 
     try {
@@ -79,7 +79,7 @@ describe('oracle CLI integration', () => {
         ['--import', 'tsx', CLI_ENTRY, '--prompt', 'conflict', '--model', 'gpt-5.1', '--models', 'gpt-5.1-pro'],
         { env },
       );
-      throw new Error('Expected oracle CLI to fail but it succeeded.');
+      throw new Error('Expected triangulator CLI to fail but it succeeded.');
     } catch (error) {
       const stderr =
         error && typeof error === 'object' && error !== null && 'stderr' in error
@@ -92,19 +92,19 @@ describe('oracle CLI integration', () => {
   }, INTEGRATION_TIMEOUT);
 
   test('runs gpt-5.1-codex via API-only path', async () => {
-    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-codex-'));
+    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'triangulator-codex-'));
     const env = {
       ...process.env,
       // biome-ignore lint/style/useNamingConvention: environment variable name
       OPENAI_API_KEY: 'sk-integration',
       // biome-ignore lint/style/useNamingConvention: environment variable name
-      ORACLE_HOME_DIR: oracleHome,
+      TRIANGULATOR_HOME_DIR: oracleHome,
       // biome-ignore lint/style/useNamingConvention: environment variable name
-      ORACLE_CLIENT_FACTORY: CLIENT_FACTORY,
+      TRIANGULATOR_CLIENT_FACTORY: CLIENT_FACTORY,
       // biome-ignore lint/style/useNamingConvention: environment variable name
-      ORACLE_NO_DETACH: '1',
+      TRIANGULATOR_NO_DETACH: '1',
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_DISABLE_KEYTAR: '1',
+      TRIANGULATOR_DISABLE_KEYTAR: '1',
     };
 
     await execFileAsync(
@@ -126,17 +126,17 @@ describe('oracle CLI integration', () => {
   }, INTEGRATION_TIMEOUT);
 
   test('rejects gpt-5.1-codex-max until OpenAI ships the API', async () => {
-    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-codex-max-'));
+    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'triangulator-codex-max-'));
     const env = {
       ...process.env,
       // biome-ignore lint/style/useNamingConvention: environment variable name
       OPENAI_API_KEY: 'sk-integration',
       // biome-ignore lint/style/useNamingConvention: environment variable name
-      ORACLE_HOME_DIR: oracleHome,
+      TRIANGULATOR_HOME_DIR: oracleHome,
       // biome-ignore lint/style/useNamingConvention: environment variable name
-      ORACLE_CLIENT_FACTORY: CLIENT_FACTORY,
+      TRIANGULATOR_CLIENT_FACTORY: CLIENT_FACTORY,
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_DISABLE_KEYTAR: '1',
+      TRIANGULATOR_DISABLE_KEYTAR: '1',
     };
 
     try {
@@ -145,7 +145,7 @@ describe('oracle CLI integration', () => {
         ['--import', 'tsx', CLI_ENTRY, '--prompt', 'Codex Max integration', '--model', 'gpt-5.1-codex-max'],
         { env },
       );
-      throw new Error('Expected oracle CLI to fail but it succeeded.');
+      throw new Error('Expected triangulator CLI to fail but it succeeded.');
     } catch (error) {
       const stderr =
         error && typeof error === 'object' && error !== null && 'stderr' in error
@@ -158,7 +158,7 @@ describe('oracle CLI integration', () => {
   }, INTEGRATION_TIMEOUT);
 
   test('runs multi-model across OpenAI, Gemini, and Claude with custom factory', async () => {
-    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-multi-'));
+    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'triangulator-multi-'));
     const env = {
       ...process.env,
       // biome-ignore lint/style/useNamingConvention: env var name
@@ -168,11 +168,11 @@ describe('oracle CLI integration', () => {
       // biome-ignore lint/style/useNamingConvention: env var name
       ANTHROPIC_API_KEY: 'ak-integration',
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_HOME_DIR: oracleHome,
+      TRIANGULATOR_HOME_DIR: oracleHome,
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_CLIENT_FACTORY: path.join(process.cwd(), 'tests', 'fixtures', 'mockPolyClient.cjs'),
+      TRIANGULATOR_CLIENT_FACTORY: path.join(process.cwd(), 'tests', 'fixtures', 'mockPolyClient.cjs'),
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_NO_DETACH: '1',
+      TRIANGULATOR_NO_DETACH: '1',
     };
 
     await execFileAsync(
@@ -206,7 +206,7 @@ describe('oracle CLI integration', () => {
   }, INTEGRATION_TIMEOUT);
 
   test('accepts shorthand multi-model list and normalizes to canonical IDs', async () => {
-    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-multi-shorthand-'));
+    const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'triangulator-multi-shorthand-'));
     const env = {
       ...process.env,
       // biome-ignore lint/style/useNamingConvention: env var name
@@ -216,11 +216,11 @@ describe('oracle CLI integration', () => {
       // biome-ignore lint/style/useNamingConvention: env var name
       ANTHROPIC_API_KEY: 'ak-integration',
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_HOME_DIR: oracleHome,
+      TRIANGULATOR_HOME_DIR: oracleHome,
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_CLIENT_FACTORY: path.join(process.cwd(), 'tests', 'fixtures', 'mockPolyClient.cjs'),
+      TRIANGULATOR_CLIENT_FACTORY: path.join(process.cwd(), 'tests', 'fixtures', 'mockPolyClient.cjs'),
       // biome-ignore lint/style/useNamingConvention: env var name
-      ORACLE_NO_DETACH: '1',
+      TRIANGULATOR_NO_DETACH: '1',
     };
 
     await execFileAsync(

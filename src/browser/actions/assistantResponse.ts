@@ -16,13 +16,13 @@ const ASSISTANT_POLL_TIMEOUT_ERROR = 'assistant-response-watchdog-timeout';
 function isAnswerNowPlaceholderText(normalized: string): boolean {
   const text = normalized.trim();
   if (!text) return false;
-  // Learned: "Pro thinking" shows a placeholder turn that contains "Answer now".
-  // That is not the final answer and must be ignored in browser automation.
-  if (text === 'chatgpt said:' || text === 'chatgpt said') return true;
-  if (text.includes('file upload request') && (text.includes('pro thinking') || text.includes('chatgpt said'))) {
+  // Learned: some UIs show placeholder turns during long-running generation.
+  const lowered = text.toLowerCase();
+  if (lowered === 'answer now' || lowered.startsWith('answer now')) return true;
+  if (lowered.includes('file upload request') && lowered.includes('thinking')) {
     return true;
   }
-  return text.includes('answer now') && (text.includes('pro thinking') || text.includes('chatgpt said'));
+  return false;
 }
 
 export async function waitForAssistantResponse(
@@ -32,7 +32,7 @@ export async function waitForAssistantResponse(
   minTurnIndex?: number,
 ): Promise<{ text: string; html?: string; meta: { turnId?: string | null; messageId?: string | null } }> {
   const start = Date.now();
-  logger('Waiting for ChatGPT response');
+  logger('Waiting for Perplexity response');
   // Learned: two paths are needed:
   // 1) DOM observer (fast when mutations fire),
   // 2) snapshot poller (fallback when observers miss or JS stalls).
@@ -116,7 +116,7 @@ export async function waitForAssistantResponse(
 
   const refreshed = await refreshAssistantSnapshot(Runtime, parsed, logger, minTurnIndex);
   const candidate = refreshed ?? parsed;
-  // The evaluation path can race ahead of completion. If ChatGPT is still streaming, wait for the watchdog poller.
+  // The evaluation path can race ahead of completion. If the UI is still streaming, wait for the watchdog poller.
   const elapsedMs = Date.now() - start;
   const remainingMs = Math.max(0, timeoutMs - elapsedMs);
   if (remainingMs > 0) {
@@ -477,21 +477,19 @@ function buildAssistantSnapshotExpression(minTurnIndex?: number): string {
       : -1;
   return `(() => {
     const MIN_TURN_INDEX = ${minTurnLiteral};
-    // Learned: the default turn DOM misses project view; keep a fallback extractor.
+    // Learned: the default turn DOM can miss Spaces view; keep a fallback extractor.
     ${buildAssistantExtractor('extractAssistantTurn')}
     const extracted = extractAssistantTurn();
     const isPlaceholder = (snapshot) => {
       const normalized = String(snapshot?.text ?? '').toLowerCase().trim();
-      if (normalized === 'chatgpt said:' || normalized === 'chatgpt said') return true;
-      if (normalized.includes('file upload request') && (normalized.includes('pro thinking') || normalized.includes('chatgpt said'))) {
-        return true;
-      }
-      return normalized.includes('answer now') && (normalized.includes('pro thinking') || normalized.includes('chatgpt said'));
+      if (normalized === 'answer now' || normalized.startsWith('answer now')) return true;
+      if (normalized.includes('file upload request') && normalized.includes('thinking')) return true;
+      return false;
     };
     if (extracted && extracted.text && !isPlaceholder(extracted)) {
       return extracted;
     }
-    // Fallback for ChatGPT project view: answers can live outside conversation turns.
+    // Fallback for Spaces view: answers can live outside conversation turns.
     const fallback = ${buildMarkdownFallbackExtractor('MIN_TURN_INDEX')};
     return fallback ?? extracted;
   })()`;
@@ -516,11 +514,9 @@ function buildResponseObserverExpression(timeoutMs: number, minTurnIndex?: numbe
     const settleDelayMs = 800;
     const isAnswerNowPlaceholder = (snapshot) => {
       const normalized = String(snapshot?.text ?? '').toLowerCase().trim();
-      if (normalized === 'chatgpt said:' || normalized === 'chatgpt said') return true;
-      if (normalized.includes('file upload request') && (normalized.includes('pro thinking') || normalized.includes('chatgpt said'))) {
-        return true;
-      }
-      return normalized.includes('answer now') && (normalized.includes('pro thinking') || normalized.includes('chatgpt said'));
+      if (normalized === 'answer now' || normalized.startsWith('answer now')) return true;
+      if (normalized.includes('file upload request') && normalized.includes('thinking')) return true;
+      return false;
     };
 
     // Helper to detect assistant turns - must match buildAssistantExtractor logic for consistency.

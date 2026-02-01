@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { setOracleHomeDirOverrideForTest } from '../../src/oracleHome.js';
+import { setTriangulatorHomeDirOverrideForTest } from '../../src/oracleHome.js';
 import { getSessionsDir } from '../../src/sessionManager.js';
 
 describe('resolveOutputPath', () => {
@@ -10,11 +10,11 @@ describe('resolveOutputPath', () => {
 
   beforeAll(() => {
     tmpHome = path.join(os.tmpdir(), 'oracle-write-output-test');
-    setOracleHomeDirOverrideForTest(tmpHome);
+    setTriangulatorHomeDirOverrideForTest(tmpHome);
   });
 
   afterAll(() => {
-    setOracleHomeDirOverrideForTest(null);
+    setTriangulatorHomeDirOverrideForTest(null);
   });
 
   test('rejects paths inside session storage', async () => {

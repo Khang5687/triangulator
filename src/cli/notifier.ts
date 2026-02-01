@@ -28,7 +28,7 @@ export interface NotificationContent {
   characters?: number;
 }
 
-const ORACLE_EMOJI = '🧿';
+const TRIANGULATOR_EMOJI = '🧿';
 
 export function resolveNotificationSettings(
   {
@@ -39,8 +39,8 @@ export function resolveNotificationSettings(
   }: { cliNotify?: boolean; cliNotifySound?: boolean; env: NodeJS.ProcessEnv; config?: NotifyConfig },
 ): NotificationSettings {
   const defaultEnabled = !(bool(env.CI) || bool(env.SSH_CONNECTION) || muteByConfig(env, config));
-  const envNotify = parseToggle(env.ORACLE_NOTIFY);
-  const envSound = parseToggle(env.ORACLE_NOTIFY_SOUND);
+  const envNotify = parseToggle(env.TRIANGULATOR_NOTIFY ?? env.ORACLE_NOTIFY);
+  const envSound = parseToggle(env.TRIANGULATOR_NOTIFY_SOUND ?? env.ORACLE_NOTIFY_SOUND);
 
   const enabled = cliNotify ?? envNotify ?? config?.enabled ?? defaultEnabled;
   const sound = cliNotifySound ?? envSound ?? config?.sound ?? false;
@@ -69,7 +69,7 @@ export async function sendSessionNotification(
     return;
   }
 
-  const title = `Oracle${ORACLE_EMOJI} finished`;
+  const title = `Triangulator${TRIANGULATOR_EMOJI} finished`;
   const message = buildMessage(payload, sanitizePreview(answerPreview));
 
   try {
@@ -293,8 +293,8 @@ function escapeAppleScript(value: string): string {
 function macAppIconOption(): Record<string, string> {
   if (process.platform !== 'darwin') return {};
   const iconPaths = [
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../assets-oracle-icon.png'),
-    path.resolve(process.cwd(), 'assets-oracle-icon.png'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../assets-triangulator-icon.png'),
+    path.resolve(process.cwd(), 'assets-triangulator-icon.png'),
   ];
   for (const candidate of iconPaths) {
     if (candidate && fsExistsSync(candidate)) {
@@ -327,8 +327,14 @@ async function tryMacNativeNotifier(title: string, message: string, settings: No
 function macNativeNotifierPath(): string | null {
   if (process.platform !== 'darwin') return null;
   const candidates = [
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../vendor/oracle-notifier/OracleNotifier.app/Contents/MacOS/OracleNotifier'),
-    path.resolve(process.cwd(), 'vendor/oracle-notifier/OracleNotifier.app/Contents/MacOS/OracleNotifier'),
+    path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../../vendor/triangulator-notifier/TriangulatorNotifier.app/Contents/MacOS/TriangulatorNotifier',
+    ),
+    path.resolve(
+      process.cwd(),
+      'vendor/triangulator-notifier/TriangulatorNotifier.app/Contents/MacOS/TriangulatorNotifier',
+    ),
   ];
   for (const candidate of candidates) {
     if (fsExistsSync(candidate)) {
@@ -348,7 +354,7 @@ function muteByConfig(env: NodeJS.ProcessEnv, config?: NotifyConfig): boolean {
 
 function isTestEnv(env: NodeJS.ProcessEnv): boolean {
   return (
-    env.ORACLE_DISABLE_NOTIFICATIONS === '1' ||
+    (env.TRIANGULATOR_DISABLE_NOTIFICATIONS ?? env.ORACLE_DISABLE_NOTIFICATIONS) === '1' ||
     env.NODE_ENV === 'test' ||
     Boolean(env.VITEST || env.VITEST_WORKER_ID || env.JEST_WORKER_ID)
   );
@@ -361,7 +367,7 @@ function describeNotifierError(error: unknown): string {
       const errno = typeof err.errno === 'number' ? err.errno : undefined;
       // macOS returns errno -86 for “Bad CPU type in executable” (e.g., wrong arch or quarantined binary).
       if (errno === -86) {
-        return 'notifier binary failed to launch (Bad CPU type/quarantine); try xattr -dr com.apple.quarantine vendor/oracle-notifier && ./vendor/oracle-notifier/build-notifier.sh';
+        return 'notifier binary failed to launch (Bad CPU type/quarantine); try xattr -dr com.apple.quarantine vendor/triangulator-notifier && ./vendor/triangulator-notifier/build-notifier.sh';
       }
     }
     if (typeof (err as { message?: unknown }).message === 'string') {

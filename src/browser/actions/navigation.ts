@@ -49,7 +49,7 @@ export function installJavaScriptDialogAutoDismissal(
   };
 }
 
-export async function navigateToChatGPT(
+export async function navigateToPerplexity(
   Page: ChromeClient['Page'],
   Runtime: ChromeClient['Runtime'],
   url: string,
@@ -70,7 +70,7 @@ export interface PromptReadyNavigationOptions {
 }
 
 export interface PromptReadyNavigationDeps {
-  navigateToChatGPT?: typeof navigateToChatGPT;
+  navigateToPerplexity?: typeof navigateToPerplexity;
   ensureNotBlocked?: typeof ensureNotBlocked;
   ensurePromptReady?: typeof ensurePromptReady;
 }
@@ -111,8 +111,8 @@ async function dismissBlockingUi(Runtime: ChromeClient['Runtime'], logger: Brows
             label === 'dismiss' ||
             label === 'continue' ||
             label === 'back' ||
-            label.includes('back to chatgpt') ||
-            label.includes('go to chatgpt') ||
+            label.includes('back to perplexity') ||
+            label.includes('go to perplexity') ||
             label.includes('return') ||
             label.includes('take me')
           );
@@ -148,7 +148,7 @@ export async function navigateToPromptReadyWithFallback(
     headless,
     logger,
   } = options;
-  const navigate = deps.navigateToChatGPT ?? navigateToChatGPT;
+  const navigate = deps.navigateToPerplexity ?? navigateToPerplexity;
   const ensureBlocked = deps.ensureNotBlocked ?? ensureNotBlocked;
   const ensureReady = deps.ensurePromptReady ?? ensurePromptReady;
 
@@ -191,8 +191,8 @@ export async function ensureLoggedIn(
   logger: BrowserLogger,
   options: { appliedCookies?: number | null; remoteSession?: boolean } = {},
 ) {
-  // Learned: ChatGPT can render the UI (project view) while auth silently failed.
-  // A backend-api probe plus DOM login CTA check catches both cases.
+  // Learned: UI can render while auth silently failed.
+  // A session probe plus DOM login CTA check catches both cases.
   const outcome = await Runtime.evaluate({
     expression: buildLoginProbeExpression(LOGIN_CHECK_TIMEOUT_MS),
     awaitPromise: true,
@@ -234,12 +234,12 @@ export async function ensureLoggedIn(
 
   const domLabel = probe.domLoginCta ? ' Login button detected on page.' : '';
   const cookieHint = options.remoteSession
-    ? 'The remote Chrome session is not signed into ChatGPT. Sign in there, then rerun.'
+    ? 'The remote Chrome session is not signed into Perplexity. Sign in there, then rerun.'
     : (options.appliedCookies ?? 0) === 0
-      ? 'No ChatGPT cookies were applied; sign in to chatgpt.com in Chrome or pass inline cookies (--browser-inline-cookies[(-file)] / ORACLE_BROWSER_COOKIES_JSON).'
-      : 'ChatGPT login appears missing; open chatgpt.com in Chrome to refresh the session or provide inline cookies (--browser-inline-cookies[(-file)] / ORACLE_BROWSER_COOKIES_JSON).';
+      ? 'No Perplexity cookies were applied; sign in to perplexity.ai in Chrome or pass inline cookies (--browser-inline-cookies[(-file)] / TRIANGULATOR_BROWSER_COOKIES_JSON).'
+      : 'Perplexity login appears missing; open perplexity.ai in Chrome to refresh the session or provide inline cookies (--browser-inline-cookies[(-file)] / TRIANGULATOR_BROWSER_COOKIES_JSON).';
 
-  throw new Error(`ChatGPT session not detected.${domLabel} ${cookieHint}`);
+  throw new Error(`Perplexity session not detected.${domLabel} ${cookieHint}`);
 }
 
 async function attemptWelcomeBackLogin(Runtime: ChromeClient['Runtime'], logger: BrowserLogger): Promise<boolean> {
@@ -329,7 +329,7 @@ export async function ensurePromptReady(Runtime: ChromeClient['Runtime'], timeou
   if (!ready) {
     const authUrl = await currentUrl(Runtime);
     if (authUrl && isAuthLoginUrl(authUrl)) {
-      // Learned: auth.openai.com/login can appear after cookies are copied; allow manual login window.
+      // Learned: login pages can appear after cookies are copied; allow manual login window.
       logger('Auth login page detected; waiting for manual login to complete...');
       const extended = Math.min(Math.max(timeoutMs, 60_000), 20 * 60_000);
       const loggedIn = await waitForPrompt(Runtime, extended);
@@ -368,10 +368,7 @@ async function currentUrl(Runtime: ChromeClient['Runtime']): Promise<string | nu
 function isAuthLoginUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    if (parsed.hostname.includes('auth.openai.com')) {
-      return true;
-    }
-    return /^\/log-?in/i.test(parsed.pathname);
+    return /^\/(log-?in|sign-?in|sign-?up|auth|register)/i.test(parsed.pathname);
   } catch {
     return false;
   }
@@ -429,21 +426,23 @@ type LoginProbeResult = {
 
 function buildLoginProbeExpression(timeoutMs: number): string {
   return `(async () => {
-    // Learned: /backend-api/me is the most reliable "am I logged in" signal.
+    // Learned: a session probe + DOM signals are the most reliable "am I logged in" checks.
     // Some UIs render without a session; use DOM + network for a robust answer.
     const timer = setTimeout(() => {}, ${timeoutMs});
     const pageUrl = typeof location === 'object' && location?.href ? location.href : null;
     const onAuthPage =
       typeof location === 'object' &&
       typeof location.pathname === 'string' &&
-      /^\\/(auth|login|signin)/i.test(location.pathname);
+      /^\\/(auth|login|signin|signup|register)/i.test(location.pathname);
 
     const hasLoginCta = () => {
       const candidates = Array.from(
         document.querySelectorAll(
           [
-            'a[href*="/auth/login"]',
-            'a[href*="/auth/signin"]',
+            'a[href*="/login"]',
+            'a[href*="/signin"]',
+            'a[href*="/signup"]',
+            'a[href*="/auth"]',
             'button[type="submit"]',
             'button[data-testid*="login"]',
             'button[data-testid*="log-in"]',
@@ -483,7 +482,7 @@ function buildLoginProbeExpression(timeoutMs: number): string {
         const timeout = setTimeout(() => controller.abort(), ${timeoutMs});
         try {
           // Credentials included so we see a 200 only when cookies are valid.
-          const response = await fetch('/backend-api/me', {
+          const response = await fetch('/api/auth/session', {
             cache: 'no-store',
             credentials: 'include',
             signal: controller.signal,

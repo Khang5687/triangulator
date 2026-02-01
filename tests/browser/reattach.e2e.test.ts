@@ -18,9 +18,9 @@ afterEach(() => {
 
 describe('browser reattach end-to-end (simulated)', () => {
   test('marks session completed after reconnection', async () => {
-    const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oracle-reattach-'));
-    const { setOracleHomeDirOverrideForTest } = await import('../../src/oracleHome.js');
-    setOracleHomeDirOverrideForTest(tmpHome);
+    const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'triangulator-reattach-'));
+    const { setTriangulatorHomeDirOverrideForTest } = await import('../../src/oracleHome.js');
+    setTriangulatorHomeDirOverrideForTest(tmpHome);
 
     try {
       const { resumeBrowserSession } = await import('../../src/browser/reattach.js');
@@ -54,7 +54,7 @@ describe('browser reattach end-to-end (simulated)', () => {
             chromePort: 51559,
             chromeHost: '127.0.0.1',
             chromeTargetId: 't-1',
-            tabUrl: 'https://chatgpt.com/c/demo',
+            tabUrl: 'https://www.perplexity.ai/spaces/demo',
           },
         },
         response: { status: 'running', incompleteReason: 'chrome-disconnected' },
@@ -74,14 +74,14 @@ describe('browser reattach end-to-end (simulated)', () => {
       expect(runs.some((r) => r.status === 'completed')).toBe(true);
     } finally {
       await fs.rm(tmpHome, { recursive: true, force: true });
-      setOracleHomeDirOverrideForTest(null);
+      setTriangulatorHomeDirOverrideForTest(null);
     }
   }, 20_000);
 
   test('reattaches when controller pid is gone even without incompleteReason', async () => {
-    const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oracle-reattach-'));
-    const { setOracleHomeDirOverrideForTest } = await import('../../src/oracleHome.js');
-    setOracleHomeDirOverrideForTest(tmpHome);
+    const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'triangulator-reattach-'));
+    const { setTriangulatorHomeDirOverrideForTest } = await import('../../src/oracleHome.js');
+    setTriangulatorHomeDirOverrideForTest(tmpHome);
 
     try {
       const { resumeBrowserSession } = await import('../../src/browser/reattach.js');
@@ -115,7 +115,7 @@ describe('browser reattach end-to-end (simulated)', () => {
             chromePort: 51559,
             chromeHost: '127.0.0.1',
             chromeTargetId: 't-1',
-            tabUrl: 'https://chatgpt.com/c/demo',
+            tabUrl: 'https://www.perplexity.ai/spaces/demo',
             controllerPid: undefined,
           },
         },
@@ -130,7 +130,7 @@ describe('browser reattach end-to-end (simulated)', () => {
             chromePort: 51559,
             chromeHost: '127.0.0.1',
             chromeTargetId: 't-1',
-            tabUrl: 'https://chatgpt.com/c/demo',
+            tabUrl: 'https://www.perplexity.ai/spaces/demo',
             controllerPid: deadController.pid ?? undefined,
           },
         },
@@ -148,14 +148,14 @@ describe('browser reattach end-to-end (simulated)', () => {
       expect(resumeMock).toHaveBeenCalledTimes(1);
     } finally {
       await fs.rm(tmpHome, { recursive: true, force: true });
-      setOracleHomeDirOverrideForTest(null);
+      setTriangulatorHomeDirOverrideForTest(null);
     }
   }, 20_000);
 
   test('reattaches after CLI termination when Chrome is left running', async () => {
-    const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oracle-reattach-'));
-    const { setOracleHomeDirOverrideForTest } = await import('../../src/oracleHome.js');
-    setOracleHomeDirOverrideForTest(tmpHome);
+    const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'triangulator-reattach-'));
+    const { setTriangulatorHomeDirOverrideForTest } = await import('../../src/oracleHome.js');
+    setTriangulatorHomeDirOverrideForTest(tmpHome);
 
     try {
       const { resumeBrowserSession } = await import('../../src/browser/reattach.js');
@@ -200,7 +200,7 @@ describe('browser reattach end-to-end (simulated)', () => {
               chromePort: 51559,
               chromeHost: '127.0.0.1',
               chromeTargetId: 't-1',
-              tabUrl: 'https://chatgpt.com/c/demo',
+              tabUrl: 'https://www.perplexity.ai/spaces/demo',
               controllerPid: deadControllerPid,
             },
           },
@@ -245,7 +245,7 @@ describe('browser reattach end-to-end (simulated)', () => {
       expect(resumeMock).toHaveBeenCalledTimes(1);
     } finally {
       await fs.rm(tmpHome, { recursive: true, force: true });
-      setOracleHomeDirOverrideForTest(null);
+      setTriangulatorHomeDirOverrideForTest(null);
     }
   }, 20_000);
 });

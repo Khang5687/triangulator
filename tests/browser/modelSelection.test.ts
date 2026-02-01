@@ -11,7 +11,6 @@ describe('browser model selection matchers', () => {
     expectContains(labelTokens, 'gpt-5.1');
     expectContains(labelTokens, 'gpt-5-1');
     expectContains(labelTokens, 'gpt51');
-    expectContains(labelTokens, 'chatgpt 5.1');
     expectContains(testIdTokens, 'gpt-5-1');
     expect(testIdTokens.some((t) => t.includes('gpt-5.1') || t.includes('gpt-5-1') || t.includes('gpt51'))).toBe(true);
   });

@@ -36,14 +36,14 @@ export async function uploadAttachmentViaDataTransfer(
 
   if (!fileInputSelector) {
     await logDomFailure(runtime, logger, 'file-input');
-    throw new Error('Unable to locate ChatGPT file attachment input.');
+    throw new Error('Unable to locate Perplexity file attachment input.');
   }
 
   const transferResult = await transferAttachmentViaDataTransfer(runtime, attachment, fileInputSelector);
 
   logger(`File transferred: ${transferResult.fileName} (${transferResult.size} bytes)`);
 
-  // Give ChatGPT a moment to process the file
+  // Give Perplexity a moment to process the file
   await delay(500);
   await waitForAttachmentVisible(runtime, transferResult.fileName, 10_000, logger);
 

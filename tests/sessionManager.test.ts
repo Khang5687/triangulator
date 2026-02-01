@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
-import { setOracleHomeDirOverrideForTest } from '../src/oracleHome.js';
+import { setTriangulatorHomeDirOverrideForTest } from '../src/oracleHome.js';
 
 type SessionModule = typeof import('../src/sessionManager.ts');
 type SessionMetadata = Awaited<ReturnType<SessionModule['initializeSession']>>;
@@ -13,8 +13,8 @@ let sessionModule: SessionModule;
 let oracleHomeDir: string;
 
 beforeAll(async () => {
-  oracleHomeDir = await mkdtemp(path.join(os.tmpdir(), 'oracle-session-tests-'));
-  setOracleHomeDirOverrideForTest(oracleHomeDir);
+  oracleHomeDir = await mkdtemp(path.join(os.tmpdir(), 'triangulator-session-tests-'));
+  setTriangulatorHomeDirOverrideForTest(oracleHomeDir);
   sessionModule = await import('../src/sessionManager.ts');
   await sessionModule.ensureSessionStorage();
 });
@@ -26,7 +26,7 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await rm(oracleHomeDir, { recursive: true, force: true });
-  setOracleHomeDirOverrideForTest(null);
+  setTriangulatorHomeDirOverrideForTest(null);
 });
 
 describe('session storage setup', () => {

@@ -13,8 +13,9 @@ import {
 import { acquireLiveTestLock, releaseLiveTestLock } from './liveLock.js';
 import { getCookies } from '@steipete/sweet-cookie';
 
-const LIVE = process.env.ORACLE_LIVE_TEST === '1';
-const MANUAL = process.env.ORACLE_LIVE_TEST_MANUAL_LOGIN === '1';
+const LIVE = process.env.TRIANGULATOR_LIVE_TEST === '1' || process.env.ORACLE_LIVE_TEST === '1';
+const MANUAL =
+  process.env.TRIANGULATOR_LIVE_TEST_MANUAL_LOGIN === '1' || process.env.ORACLE_LIVE_TEST_MANUAL_LOGIN === '1';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -42,7 +43,7 @@ async function waitForPageTarget(host: string, port: number, timeoutMs = 30_000)
     try {
       const targets = await CDP.List({ host, port });
       const candidate =
-        targets.find((target) => target.type === 'page' && target.url?.includes('chatgpt.com')) ??
+        targets.find((target) => target.type === 'page' && target.url?.includes('perplexity.ai')) ??
         targets.find((target) => target.type === 'page' && !target.url?.startsWith('chrome://')) ??
         targets.find((target) => target.type === 'page');
       if (candidate?.id) {
@@ -56,28 +57,28 @@ async function waitForPageTarget(host: string, port: number, timeoutMs = 30_000)
   throw new Error('Timed out waiting for an inspectable page target.');
 }
 
-(LIVE && MANUAL ? describe : describe.skip)('ChatGPT browser live manual-login cleanup', () => {
+(LIVE && MANUAL ? describe : describe.skip)('Perplexity browser live manual-login cleanup', () => {
   test(
     'preserves DevToolsActivePort when connection drops but Chrome stays running',
     async () => {
-      const profileDir = await mkdtemp(path.join(os.tmpdir(), 'oracle-manual-login-'));
+      const profileDir = await mkdtemp(path.join(os.tmpdir(), 'triangulator-manual-login-'));
       const { cookies } = await getCookies({
-        url: 'https://chatgpt.com',
-        origins: ['https://chatgpt.com', 'https://chat.openai.com', 'https://atlas.openai.com'],
+        url: 'https://www.perplexity.ai',
+        origins: ['https://www.perplexity.ai'],
         browsers: ['chrome'],
         mode: 'merge',
         chromeProfile: 'Default',
         timeoutMs: 5_000,
       });
-      const hasSession = cookies.some((cookie) => cookie.name.startsWith('__Secure-next-auth.session-token'));
+      const hasSession = cookies.length > 0;
       if (!hasSession) {
         console.warn(
-          'Skipping manual-login live test (missing __Secure-next-auth.session-token). Open chatgpt.com in Chrome and retry.',
+          'Skipping manual-login live test (missing Perplexity cookies). Open perplexity.ai in Chrome and retry.',
         );
         return;
       }
 
-      await acquireLiveTestLock('chatgpt-browser');
+      await acquireLiveTestLock('perplexity-browser');
       try {
         let runError: Error | null = null;
         const promptToken = `live manual login cleanup ${Date.now()}`;
@@ -122,7 +123,7 @@ async function waitForPageTarget(host: string, port: number, timeoutMs = 30_000)
         expect(paths.some((candidate) => existsSync(candidate))).toBe(true);
       } finally {
         await rm(profileDir, { recursive: true, force: true });
-        await releaseLiveTestLock('chatgpt-browser');
+        await releaseLiveTestLock('perplexity-browser');
       }
     },
     12 * 60 * 1000,

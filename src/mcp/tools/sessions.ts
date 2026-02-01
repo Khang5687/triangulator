@@ -13,7 +13,7 @@ const sessionsInputShape = {
   includeAll: z
     .boolean()
     .optional()
-    .describe('Include sessions outside the time window when listing (mirrors `oracle status --all`).'),
+    .describe('Include sessions outside the time window when listing (mirrors `triangulator status --all`).'),
   detail: z
     .boolean()
     .optional()
@@ -47,9 +47,9 @@ export function registerSessionsTool(server: McpServer): void {
   server.registerTool(
     'sessions',
     {
-      title: 'List or fetch oracle sessions',
+      title: 'List or fetch triangulator sessions',
       description:
-        'Inspect Oracle session history stored under `ORACLE_HOME_DIR` (shared with the CLI). List recent sessions or fetch one by id/slug (optionally including metadata + request + log).',
+        'Inspect Triangulator session history stored under `TRIANGULATOR_HOME_DIR` (shared with the CLI). List recent sessions or fetch one by id/slug (optionally including metadata + request + log).',
       inputSchema: sessionsInputShape,
       outputSchema: sessionsOutputShape,
     },

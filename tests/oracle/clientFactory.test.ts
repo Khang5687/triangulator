@@ -8,12 +8,13 @@ describe('createDefaultClientFactory', () => {
   });
 
   afterEach(() => {
+    delete process.env.TRIANGULATOR_CLIENT_FACTORY;
     delete process.env.ORACLE_CLIENT_FACTORY;
     vi.restoreAllMocks();
   });
 
   test('falls back to default factory and warns when custom factory export is invalid', async () => {
-    process.env.ORACLE_CLIENT_FACTORY = '/nonexistent/path.js';
+    process.env.TRIANGULATOR_CLIENT_FACTORY = '/nonexistent/path.js';
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const { createDefaultClientFactory } = await import('../../src/oracle/client.js');
@@ -23,7 +24,7 @@ describe('createDefaultClientFactory', () => {
   });
 
   test('uses inline test factory hook when requested', async () => {
-    process.env.ORACLE_CLIENT_FACTORY = 'INLINE_TEST_FACTORY';
+    process.env.TRIANGULATOR_CLIENT_FACTORY = 'INLINE_TEST_FACTORY';
     const { createDefaultClientFactory } = await import('../../src/oracle/client.js');
     const factory = createDefaultClientFactory();
     const client = factory('key');
@@ -43,7 +44,7 @@ describe('createDefaultClientFactory', () => {
   });
 
   test('routes gemini models through the Gemini client', async () => {
-    process.env.ORACLE_CLIENT_FACTORY = '';
+    process.env.TRIANGULATOR_CLIENT_FACTORY = '';
     const createGeminiClient = vi.fn((key, model, resolvedModelId) => ({
       client: 'gemini',
       key,
@@ -61,7 +62,7 @@ describe('createDefaultClientFactory', () => {
   });
 
   test('routes claude models through the Claude client', async () => {
-    process.env.ORACLE_CLIENT_FACTORY = '';
+    process.env.TRIANGULATOR_CLIENT_FACTORY = '';
     const createClaudeClient = vi.fn((key, model, resolvedModelId, baseUrl) => ({
       client: 'claude',
       key,
@@ -84,7 +85,7 @@ describe('createDefaultClientFactory', () => {
   });
 
   test('creates OpenAI clients for default and Azure paths', async () => {
-    process.env.ORACLE_CLIENT_FACTORY = '';
+    process.env.TRIANGULATOR_CLIENT_FACTORY = '';
     const { createDefaultClientFactory } = await import('../../src/oracle/client.js');
     const factory = createDefaultClientFactory();
 

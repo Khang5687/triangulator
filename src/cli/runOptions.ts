@@ -6,7 +6,7 @@ import { resolveEngine } from './engine.js';
 import { normalizeModelOption, inferModelFromLabel, resolveApiModel, normalizeBaseUrl } from './options.js';
 import { resolveGeminiModelId } from '../oracle/gemini.js';
 import { PromptValidationError } from '../oracle/errors.js';
-import { normalizeChatGptModelForBrowser } from './browserConfig.js';
+import { normalizeModelForBrowser } from './browserConfig.js';
 
 export interface ResolveRunOptionsInput {
   prompt: string;
@@ -44,8 +44,8 @@ export function resolveRunOptionsFromConfig({
     resolvedEngine === 'browser' && normalizedRequestedModels.length === 0
       ? inferModelFromLabel(cliModelArg)
       : resolveApiModel(cliModelArg);
-  // Browser engine maps Pro/legacy aliases to the latest ChatGPT picker targets (GPT-5.2 / GPT-5.2 Pro).
-  const resolvedModel = resolvedEngine === 'browser' ? normalizeChatGptModelForBrowser(inferredModel) : inferredModel;
+  // Browser engine maps Pro/legacy aliases to the latest browser picker targets (GPT-5.2 / GPT-5.2 Pro).
+  const resolvedModel = resolvedEngine === 'browser' ? normalizeModelForBrowser(inferredModel) : inferredModel;
   const isCodex = resolvedModel.startsWith('gpt-5.1-codex');
   const isClaude = resolvedModel.startsWith('claude');
   const isGrok = resolvedModel.startsWith('grok');
@@ -117,7 +117,7 @@ function resolveEngineWithConfig({
   env: NodeJS.ProcessEnv;
 }): EngineMode {
   if (engine) return engine;
-  const envOverride = (env.ORACLE_ENGINE ?? '').trim().toLowerCase();
+  const envOverride = (env.TRIANGULATOR_ENGINE ?? env.ORACLE_ENGINE ?? '').trim().toLowerCase();
   if (envOverride === 'api' || envOverride === 'browser') {
     return envOverride as EngineMode;
   }

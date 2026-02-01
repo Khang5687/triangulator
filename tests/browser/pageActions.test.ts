@@ -4,7 +4,7 @@ import {
   waitForAssistantResponse,
   uploadAttachmentFile,
   waitForAttachmentCompletion,
-  navigateToChatGPT,
+  navigateToPerplexity,
   navigateToPromptReadyWithFallback,
   ensurePromptReady,
   ensureNotBlocked,
@@ -57,12 +57,12 @@ describe('ensureModelSelection', () => {
       evaluate: vi.fn().mockResolvedValue({ result: { value: { status: 'button-missing' } } }),
     } as unknown as ChromeClient['Runtime'];
     await expect(ensureModelSelection(runtime, 'Instant', logger)).rejects.toThrow(
-      /Unable to locate the ChatGPT model selector button/,
+      /Unable to locate the model selector button/,
     );
   });
 });
 
-describe('navigateToChatGPT', () => {
+describe('navigateToPerplexity', () => {
   test('navigates and waits for ready state', async () => {
     const navigate = vi.fn().mockResolvedValue(undefined);
     const runtime = {
@@ -71,13 +71,13 @@ describe('navigateToChatGPT', () => {
         .mockResolvedValueOnce({ result: { value: 'loading' } })
         .mockResolvedValueOnce({ result: { value: 'complete' } }),
     } as unknown as ChromeClient['Runtime'];
-    await navigateToChatGPT(
+    await navigateToPerplexity(
       { navigate } as unknown as ChromeClient['Page'],
       runtime,
-      'https://chat.openai.com',
+      'https://www.perplexity.ai',
       logger,
     );
-    expect(navigate).toHaveBeenCalledWith({ url: 'https://chat.openai.com' });
+    expect(navigate).toHaveBeenCalledWith({ url: 'https://www.perplexity.ai' });
     expect(runtime.evaluate).toHaveBeenCalledTimes(2);
   });
 });
@@ -98,22 +98,22 @@ describe('navigateToPromptReadyWithFallback', () => {
         page,
         runtime,
         {
-          url: 'https://chatgpt.com/g/missing/project',
-          fallbackUrl: 'https://chatgpt.com/',
+          url: 'https://www.perplexity.ai/spaces/missing-space',
+          fallbackUrl: 'https://www.perplexity.ai/',
           timeoutMs: 5_000,
           headless: false,
           logger,
         },
         {
-          navigateToChatGPT: navigate,
+          navigateToPerplexity: navigate,
           ensureNotBlocked: ensureNotBlockedMock,
           ensurePromptReady: ensurePromptReadyMock,
         },
       ),
     ).resolves.toEqual({ usedFallback: true });
 
-    expect(navigate).toHaveBeenNthCalledWith(1, page, runtime, 'https://chatgpt.com/g/missing/project', logger);
-    expect(navigate).toHaveBeenNthCalledWith(2, page, runtime, 'https://chatgpt.com/', logger);
+    expect(navigate).toHaveBeenNthCalledWith(1, page, runtime, 'https://www.perplexity.ai/spaces/missing-space', logger);
+    expect(navigate).toHaveBeenNthCalledWith(2, page, runtime, 'https://www.perplexity.ai/', logger);
     expect(ensureNotBlockedMock).toHaveBeenCalledTimes(2);
     expect(ensurePromptReadyMock).toHaveBeenNthCalledWith(1, runtime, 5_000, logger);
     expect(ensurePromptReadyMock).toHaveBeenNthCalledWith(2, runtime, 120_000, logger);
@@ -150,7 +150,7 @@ describe('ensureNotBlocked', () => {
     const runtime = {
       evaluate: vi
         .fn()
-        .mockResolvedValueOnce({ result: { value: 'ChatGPT' } })
+        .mockResolvedValueOnce({ result: { value: 'Perplexity' } })
         .mockResolvedValueOnce({ result: { value: false } }),
     } as unknown as ChromeClient['Runtime'];
     await expect(ensureNotBlocked(runtime, false, logger)).resolves.toBeUndefined();
@@ -246,7 +246,7 @@ describe('uploadAttachmentFile', () => {
   beforeEach(() => {
     transferSpy = vi
       .spyOn(attachmentDataTransfer, 'transferAttachmentViaDataTransfer')
-      .mockResolvedValue({ fileName: 'oracle-browser-smoke.txt', size: 1 });
+      .mockResolvedValue({ fileName: 'triangulator-browser-smoke.txt', size: 1 });
   });
 
   afterEach(() => {
@@ -362,7 +362,7 @@ describe('uploadAttachmentFile', () => {
     await expect(
       uploadAttachmentFile(
         { runtime, dom },
-        { path: '/tmp/oracle-browser-smoke.txt', displayPath: 'oracle-browser-smoke.txt' },
+        { path: '/tmp/triangulator-browser-smoke.txt', displayPath: 'triangulator-browser-smoke.txt' },
         logger,
       ),
     ).resolves.toBe(true);
@@ -403,7 +403,7 @@ describe('uploadAttachmentFile', () => {
     await expect(
       uploadAttachmentFile(
         { runtime, dom },
-        { path: '/tmp/oracle-browser-smoke.txt', displayPath: 'oracle-browser-smoke.txt' },
+        { path: '/tmp/triangulator-browser-smoke.txt', displayPath: 'triangulator-browser-smoke.txt' },
         logger,
         { expectedCount: 1 },
       ),
@@ -446,7 +446,7 @@ describe('uploadAttachmentFile', () => {
     await expect(
       uploadAttachmentFile(
         { runtime, dom },
-        { path: '/tmp/oracle-browser-smoke.txt', displayPath: 'oracle-browser-smoke.txt' },
+        { path: '/tmp/triangulator-browser-smoke.txt', displayPath: 'triangulator-browser-smoke.txt' },
         logger,
         { expectedCount: 1 },
       ),
@@ -503,7 +503,7 @@ describe('uploadAttachmentFile', () => {
               value: {
                 chipCount: 1,
                 chips: [],
-                inputNames: ['oracle-browser-smoke.txt'],
+                inputNames: ['triangulator-browser-smoke.txt'],
                 composerText: '',
                 uploading: true,
               },
@@ -523,7 +523,7 @@ describe('uploadAttachmentFile', () => {
     await expect(
       uploadAttachmentFile(
         { runtime, dom },
-        { path: '/tmp/oracle-browser-smoke.txt', displayPath: 'oracle-browser-smoke.txt' },
+        { path: '/tmp/triangulator-browser-smoke.txt', displayPath: 'triangulator-browser-smoke.txt' },
         logger,
       ),
     ).resolves.toBe(true);
@@ -606,7 +606,7 @@ describe('uploadAttachmentFile', () => {
     vi.useFakeTimers();
     const uploadPromise = uploadAttachmentFile(
       { runtime, dom },
-      { path: '/tmp/oracle-browser-smoke.txt', displayPath: 'oracle-browser-smoke.txt' },
+      { path: '/tmp/triangulator-browser-smoke.txt', displayPath: 'triangulator-browser-smoke.txt' },
       logger,
     );
     await Promise.resolve();
@@ -682,7 +682,7 @@ describe('uploadAttachmentFile', () => {
               value: {
                 chipCount: 1,
                 chips: [],
-                inputNames: ['oracle-browser-smoke.txt'],
+                inputNames: ['triangulator-browser-smoke.txt'],
                 composerText: '',
                 uploading: false,
               },
@@ -702,7 +702,7 @@ describe('uploadAttachmentFile', () => {
     await expect(
       uploadAttachmentFile(
         { runtime, dom },
-        { path: '/tmp/oracle-browser-smoke.txt', displayPath: 'oracle-browser-smoke.txt' },
+        { path: '/tmp/triangulator-browser-smoke.txt', displayPath: 'triangulator-browser-smoke.txt' },
         logger,
       ),
     ).resolves.toBe(true);
@@ -750,7 +750,7 @@ describe('uploadAttachmentFile', () => {
             },
           };
         }
-        if (expr.includes('input[type="file"][data-oracle-upload-idx') && expr.includes('names')) {
+        if (expr.includes('input[type="file"][data-triangulator-upload-idx') && expr.includes('names')) {
           return { result: { value: { names: [], value: '', count: 0 } } };
         }
         if (expr.includes('chipCount') && expr.includes('composerText') && expr.includes('uploading')) {
@@ -773,7 +773,7 @@ describe('uploadAttachmentFile', () => {
     vi.useFakeTimers();
     const uploadPromise = uploadAttachmentFile(
       { runtime, dom },
-      { path: '/tmp/oracle-browser-smoke.txt', displayPath: 'oracle-browser-smoke.txt' },
+      { path: '/tmp/triangulator-browser-smoke.txt', displayPath: 'triangulator-browser-smoke.txt' },
       logger,
     );
     const handledPromise = uploadPromise.catch((error) => error as Error);
@@ -850,7 +850,7 @@ describe('uploadAttachmentFile', () => {
     vi.useFakeTimers();
     const uploadPromise = uploadAttachmentFile(
       { runtime, dom },
-      { path: '/tmp/oracle-browser-smoke.txt', displayPath: 'oracle-browser-smoke.txt' },
+      { path: '/tmp/triangulator-browser-smoke.txt', displayPath: 'triangulator-browser-smoke.txt' },
       logger,
     );
     await Promise.resolve();
@@ -870,7 +870,7 @@ describe('waitForAttachmentVisible', () => {
     const evaluate = vi.fn().mockResolvedValue({ result: { value: { found: true, source: 'file-input' } } });
     const runtime = { evaluate } as unknown as ChromeClient['Runtime'];
 
-    await expect(attachments.waitForAttachmentVisible(runtime, 'oracle-browser-smoke.txt', 100, logger)).resolves.toBeUndefined();
+    await expect(attachments.waitForAttachmentVisible(runtime, 'triangulator-browser-smoke.txt', 100, logger)).resolves.toBeUndefined();
 
     const call = (evaluate as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]?.[0] as
       | { expression?: string }

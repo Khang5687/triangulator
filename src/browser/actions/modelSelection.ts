@@ -13,6 +13,15 @@ export async function ensureModelSelection(
   logger: BrowserLogger,
   strategy: BrowserModelStrategy = 'select',
 ) {
+  const hostCheck = await Runtime.evaluate({
+    expression: 'location.hostname',
+    returnByValue: true,
+  }).catch(() => null);
+  const host = typeof hostCheck?.result?.value === 'string' ? hostCheck.result.value : '';
+  if (host.includes('perplexity.ai')) {
+    logger('Model picker: skipped (unsupported on Perplexity)');
+    return;
+  }
   const outcome = await Runtime.evaluate({
     expression: buildModelSelectionExpression(desiredModel, strategy),
     awaitPromise: true,
@@ -42,19 +51,19 @@ export async function ensureModelSelection(
       const availableHint = available.length > 0 ? ` Available: ${available.join(', ')}.` : '';
       const tempHint =
         isTemporary && /\bpro\b/i.test(desiredModel)
-          ? ' You are in Temporary Chat mode; Pro models are not available there. Remove "temporary-chat=true" from --chatgpt-url or use a non-Pro model (e.g. gpt-5.2).'
+          ? ' Temporary chat mode does not expose Pro models; use a non-Pro model (e.g. gpt-5.2).'
           : '';
       throw new Error(`Unable to find model option matching "${desiredModel}" in the model switcher.${availableHint}${tempHint}`);
     }
     default: {
       await logDomFailure(Runtime, logger, 'model-switcher-button');
-      throw new Error('Unable to locate the ChatGPT model selector button.');
+      throw new Error('Unable to locate the model selector button.');
     }
   }
 }
 
 /**
- * Builds the DOM expression that runs inside the ChatGPT tab to select a model.
+ * Builds the DOM expression that runs inside the browser tab to select a model.
  * The string is evaluated inside Chrome, so keep it self-contained and well-commented.
  */
 function buildModelSelectionExpression(targetModel: string, strategy: BrowserModelStrategy): string {
@@ -395,8 +404,8 @@ function buildModelMatchersLiteral(targetModel: string): { labelTokens: string[]
   push(collapsed, labelTokens);
   const dotless = base.replace(/[.]/g, '');
   push(dotless, labelTokens);
-  push(`chatgpt ${base}`, labelTokens);
-  push(`chatgpt ${dotless}`, labelTokens);
+  push(`gpt ${base}`, labelTokens);
+  push(`gpt ${dotless}`, labelTokens);
   push(`gpt ${base}`, labelTokens);
   push(`gpt ${dotless}`, labelTokens);
   // Numeric variations (5.1 ↔ 51 ↔ gpt-5-1)
@@ -407,7 +416,7 @@ function buildModelMatchersLiteral(targetModel: string): { labelTokens: string[]
     push('gpt-5-1', labelTokens);
     push('gpt5-1', labelTokens);
     push('gpt51', labelTokens);
-    push('chatgpt 5.1', labelTokens);
+    push('gpt 5.1', labelTokens);
     testIdTokens.add('gpt-5-1');
     testIdTokens.add('gpt5-1');
     testIdTokens.add('gpt51');
@@ -420,7 +429,7 @@ function buildModelMatchersLiteral(targetModel: string): { labelTokens: string[]
     push('gpt-5-0', labelTokens);
     push('gpt5-0', labelTokens);
     push('gpt50', labelTokens);
-    push('chatgpt 5.0', labelTokens);
+    push('gpt 5.0', labelTokens);
     testIdTokens.add('gpt-5-0');
     testIdTokens.add('gpt5-0');
     testIdTokens.add('gpt50');
@@ -433,7 +442,7 @@ function buildModelMatchersLiteral(targetModel: string): { labelTokens: string[]
     push('gpt-5-2', labelTokens);
     push('gpt5-2', labelTokens);
     push('gpt52', labelTokens);
-    push('chatgpt 5.2', labelTokens);
+    push('gpt 5.2', labelTokens);
     // Thinking variant: explicit testid for "Thinking" picker option
     if (base.includes('thinking')) {
       push('thinking', labelTokens);
@@ -491,7 +500,7 @@ function buildModelMatchersLiteral(targetModel: string): { labelTokens: string[]
   push(hyphenated, testIdTokens);
   push(collapsed, testIdTokens);
   push(dotless, testIdTokens);
-  // data-testid values observed in the ChatGPT picker (e.g., model-switcher-gpt-5.1-pro)
+  // data-testid values observed in the model picker (e.g., model-switcher-gpt-5.1-pro)
   push(`model-switcher-${hyphenated}`, testIdTokens);
   push(`model-switcher-${collapsed}`, testIdTokens);
   push(`model-switcher-${dotless}`, testIdTokens);

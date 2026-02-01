@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import chalk from 'chalk';
-import { getOracleHomeDir } from '../../oracleHome.js';
+import { getTriangulatorHomeDir } from '../../oracleHome.js';
 import { parseHostPort, normalizeHostPort, formatBridgeConnectionString } from '../../bridge/connection.js';
 import type { BridgeConnectionArtifact } from '../../bridge/connection.js';
 import { serveRemote } from '../../remote/server.js';
@@ -37,7 +37,7 @@ export async function runBridgeHost(options: BridgeHostCliOptions): Promise<void
   }
 
   const writeConnectionPath =
-    options.writeConnection?.trim() || path.join(getOracleHomeDir(), 'bridge-connection.json');
+    options.writeConnection?.trim() || path.join(getTriangulatorHomeDir(), 'bridge-connection.json');
 
   const sshTarget = options.ssh?.trim();
   const sshRemotePort = typeof options.sshRemotePort === 'number' ? options.sshRemotePort : bindPort;
@@ -288,10 +288,10 @@ async function spawnBridgeHostInBackground({
   sshIdentity?: string;
   sshExtraArgs?: string;
 }): Promise<void> {
-  const oracleHome = getOracleHomeDir();
-  await fs.mkdir(oracleHome, { recursive: true, mode: 0o700 });
-  const logPath = path.join(oracleHome, 'bridge-host.log');
-  const pidPath = path.join(oracleHome, 'bridge-host.pid');
+  const triangulatorHome = getTriangulatorHomeDir();
+  await fs.mkdir(triangulatorHome, { recursive: true, mode: 0o700 });
+  const logPath = path.join(triangulatorHome, 'bridge-host.log');
+  const pidPath = path.join(triangulatorHome, 'bridge-host.pid');
 
   const logHandle = await fs.open(logPath, 'a');
   const stdio: Array<'ignore' | number> = ['ignore', logHandle.fd, logHandle.fd];

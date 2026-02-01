@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import JSON5 from 'json5';
-import { getOracleHomeDir } from './oracleHome.js';
+import os from 'node:os';
+import { getTriangulatorHomeDir } from './oracleHome.js';
 import type { BrowserModelStrategy } from './browser/types.js';
 import type { ThinkingTimeLevel } from './oracle/types.js';
 
@@ -17,11 +18,14 @@ export interface BrowserConfigDefaults {
   chromeProfile?: string | null;
   chromePath?: string | null;
   chromeCookiePath?: string | null;
+  perplexityUrl?: string | null;
+  /** Legacy config key (Oracle). */
   chatgptUrl?: string | null;
+  /** Legacy alias (Oracle). */
   url?: string;
-  /** Delegate browser automation to a remote `oracle serve` instance (host:port). */
+  /** Delegate browser automation to a remote `triangulator serve` instance (host:port). */
   remoteHost?: string | null;
-  /** Access token clients must provide to the remote `oracle serve` instance. */
+  /** Access token clients must provide to the remote `triangulator serve` instance. */
   remoteToken?: string | null;
   /** Optional metadata for the SSH reverse-tunnel that makes remoteHost reachable. */
   remoteViaSshReverseTunnel?: RemoteViaSshReverseTunnelConfig | null;
@@ -33,11 +37,11 @@ export interface BrowserConfigDefaults {
   hideWindow?: boolean;
   keepBrowser?: boolean;
   modelStrategy?: BrowserModelStrategy;
-  /** Thinking time intensity (ChatGPT Thinking/Pro models): 'light', 'standard', 'extended', 'heavy' */
+  /** Thinking time intensity: 'light', 'standard', 'extended', 'heavy' */
   thinkingTime?: ThinkingTimeLevel;
-  /** Skip cookie sync and reuse a persistent automation profile (waits for manual ChatGPT login). */
+  /** Skip cookie sync and reuse a persistent automation profile (waits for manual login). */
   manualLogin?: boolean;
-  /** Manual-login profile directory override (also available via ORACLE_BROWSER_PROFILE_DIR). */
+  /** Manual-login profile directory override (also available via TRIANGULATOR_BROWSER_PROFILE_DIR). */
   manualLoginProfileDir?: string | null;
 }
 
@@ -71,7 +75,43 @@ export interface UserConfig {
 }
 
 function resolveConfigPath(): string {
-  return path.join(getOracleHomeDir(), 'config.json');
+  return path.join(getTriangulatorHomeDir(), 'config.json');
+}
+
+function resolveLegacyConfigPath(): string {
+  const legacyHome = process.env.ORACLE_HOME_DIR ?? path.join(os.homedir(), '.oracle');
+  return path.join(legacyHome, 'config.json');
+}
+
+async function migrateLegacyConfigIfNeeded(nextPath: string, legacyPath: string): Promise<void> {
+  try {
+    await fs.stat(nextPath);
+    return;
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  let legacyStat;
+  try {
+    legacyStat = await fs.stat(legacyPath);
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') {
+      return;
+    }
+    throw error;
+  }
+
+  if (!legacyStat?.isFile?.()) {
+    return;
+  }
+
+  await fs.mkdir(path.dirname(nextPath), { recursive: true, mode: 0o700 });
+  await fs.copyFile(legacyPath, nextPath);
+  if (process.platform !== 'win32') {
+    await fs.chmod(nextPath, legacyStat.mode & 0o777).catch(() => undefined);
+  }
 }
 
 export interface LoadConfigResult {
@@ -82,6 +122,11 @@ export interface LoadConfigResult {
 
 export async function loadUserConfig(): Promise<LoadConfigResult> {
   const CONFIG_PATH = resolveConfigPath();
+  const LEGACY_PATH = resolveLegacyConfigPath();
+  await migrateLegacyConfigIfNeeded(CONFIG_PATH, LEGACY_PATH).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Failed to migrate legacy config (${LEGACY_PATH}): ${message}`);
+  });
   try {
     const raw = await fs.readFile(CONFIG_PATH, 'utf8');
     const parsed = JSON5.parse(raw) as UserConfig;

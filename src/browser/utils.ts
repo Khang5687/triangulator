@@ -98,10 +98,10 @@ export function formatBytes(size: number): string {
 }
 
 /**
- * Normalizes a ChatGPT URL, ensuring it is absolute, uses http/https, and trims whitespace.
+ * Normalizes a Perplexity URL, ensuring it is absolute, uses http/https, and trims whitespace.
  * Falls back to the provided default when input is empty/undefined.
  */
-export function normalizeChatgptUrl(raw: string | null | undefined, fallback: string): string {
+export function normalizePerplexityUrl(raw: string | null | undefined, fallback: string): string {
   const candidate = raw?.trim();
   if (!candidate) {
     return fallback;
@@ -112,13 +112,18 @@ export function normalizeChatgptUrl(raw: string | null | undefined, fallback: st
   try {
     parsed = new URL(withScheme);
   } catch {
-    throw new Error(`Invalid ChatGPT URL: "${raw}". Provide an absolute http(s) URL.`);
+    throw new Error(`Invalid Perplexity URL: "${raw}". Provide an absolute http(s) URL.`);
   }
   if (!/^https?:$/i.test(parsed.protocol)) {
-    throw new Error(`Invalid ChatGPT URL protocol: "${parsed.protocol}". Use http or https.`);
+    throw new Error(`Invalid Perplexity URL protocol: "${parsed.protocol}". Use http or https.`);
   }
   // Preserve user-provided path/query; URL#toString will normalize trailing slashes appropriately.
   return parsed.toString();
+}
+
+// Legacy alias retained to minimize upstream merge conflicts.
+export function normalizeChatgptUrl(raw: string | null | undefined, fallback: string): string {
+  return normalizePerplexityUrl(raw, fallback);
 }
 
 export function isTemporaryChatUrl(url: string): boolean {

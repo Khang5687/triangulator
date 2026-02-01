@@ -1,8 +1,8 @@
 # Local configuration (JSON5)
 
-Oracle reads an optional per-user config from `~/.oracle/config.json`. The file uses JSON5 parsing, so trailing commas and comments are allowed.
+Triangulator reads an optional per-user config from `~/.triangulator/config.json`. The file uses JSON5 parsing, so trailing commas and comments are allowed.
 
-## Example (`~/.oracle/config.json`)
+## Example (`~/.triangulator/config.json`)
 
 ```json5
 {
@@ -21,20 +21,20 @@ Oracle reads an optional per-user config from `~/.oracle/config.json`. The file 
     chromeProfile: "Default",
     chromePath: null,
     chromeCookiePath: null,
-    chatgptUrl: "https://chatgpt.com/", // root is fine; folder URLs also work
-    url: null, // alias for chatgptUrl (kept for back-compat)
+    perplexityUrl: "https://www.perplexity.ai/", // root is fine; space URLs also work
+    url: null, // alias for perplexityUrl (kept for back-compat)
     // Remote browser bridge (preferred place to store remote host settings)
     remoteHost: "127.0.0.1:9473",
-    remoteToken: "…", // written by `oracle bridge client` (kept private; not printed by default)
+    remoteToken: "…", // written by `triangulator bridge client` (kept private; not printed by default)
     remoteViaSshReverseTunnel: { ssh: "user@linux-host", remotePort: 9473 }, // optional metadata
-    debugPort: null,          // fixed DevTools port (env: ORACLE_BROWSER_PORT / ORACLE_BROWSER_DEBUG_PORT)
+    debugPort: null,          // fixed DevTools port (env: TRIANGULATOR_BROWSER_PORT / TRIANGULATOR_BROWSER_DEBUG_PORT)
     timeoutMs: 1200000,
     inputTimeoutMs: 30000,
     cookieSyncWaitMs: 0,      // wait (ms) before retrying cookie sync when Chrome cookies are empty/locked
-    modelStrategy: "select", // select | current | ignore (ChatGPT only; ignored for Gemini web)
-    thinkingTime: "extended", // light | standard | extended | heavy (ChatGPT Thinking/Pro models)
+    modelStrategy: "select", // select | current | ignore (ignored for Perplexity today)
+    thinkingTime: "extended", // light | standard | extended | heavy (browser models that support it)
     manualLogin: false,        // set true to reuse a persistent automation profile and sign in once (Windows defaults to true when unset)
-    manualLoginProfileDir: null, // override profile dir (or set ORACLE_BROWSER_PROFILE_DIR)
+    manualLoginProfileDir: null, // override profile dir (or set TRIANGULATOR_BROWSER_PROFILE_DIR)
     headless: false,
     hideWindow: false,
     keepBrowser: false,
@@ -62,16 +62,16 @@ Oracle reads an optional per-user config from `~/.oracle/config.json`. The file 
 CLI flags → `config.json` → environment → built-in defaults.
 
 - `engine`, `model`, `search`, `filesReport`, `heartbeatSeconds`, and `apiBaseUrl` in `config.json` override the auto-detected values unless explicitly set on the CLI.
-- `ORACLE_ENGINE=api|browser` is a global override for engine selection (useful for MCP/Codex setups); it wins over `config.json`.
-- If `azure.endpoint` (or `--azure-endpoint`) is set, Oracle reads `AZURE_OPENAI_API_KEY` first and falls back to `OPENAI_API_KEY` for GPT models.
-- Remote browser defaults follow the same order: `--remote-host/--remote-token` win, then `browser.remoteHost` / `browser.remoteToken` in the config, then `ORACLE_REMOTE_HOST` / `ORACLE_REMOTE_TOKEN` if still unset.
+- `TRIANGULATOR_ENGINE=api|browser` is a global override for engine selection (useful for MCP/Codex setups); it wins over `config.json`.
+- If `azure.endpoint` (or `--azure-endpoint`) is set, Triangulator reads `AZURE_OPENAI_API_KEY` first and falls back to `OPENAI_API_KEY` for GPT models.
+- Remote browser defaults follow the same order: `--remote-host/--remote-token` win, then `browser.remoteHost` / `browser.remoteToken` in the config, then `TRIANGULATOR_REMOTE_HOST` / `TRIANGULATOR_REMOTE_TOKEN` if still unset.
 - `OPENAI_API_KEY` only influences engine selection when neither the CLI nor `config.json` specify an engine (API when present, otherwise browser).
-- `ORACLE_NOTIFY*` env vars still layer on top of the config’s `notify` block.
-- `sessionRetentionHours` controls the default value for `--retain-hours`. When unset, `ORACLE_RETAIN_HOURS` (if present) becomes the fallback, and the CLI flag still wins over both.
-- `browser.chatgptUrl` accepts either the root ChatGPT URL (`https://chatgpt.com/`) or a folder/workspace URL (e.g., `https://chatgpt.com/g/.../project`); `browser.url` remains as a legacy alias.
+- `TRIANGULATOR_NOTIFY*` env vars still layer on top of the config’s `notify` block.
+- `sessionRetentionHours` controls the default value for `--retain-hours`. When unset, `TRIANGULATOR_RETAIN_HOURS` (if present) becomes the fallback, and the CLI flag still wins over both.
+- `browser.perplexityUrl` accepts either the root Perplexity URL (`https://www.perplexity.ai/`) or a folder/workspace URL (e.g., `https://www.perplexity.ai/g/.../project`); `browser.url` remains as a legacy alias.
 - Browser automation defaults can be set under `browser.*`, including `browser.manualLogin`, `browser.manualLoginProfileDir`, and `browser.thinkingTime` (CLI override: `--browser-thinking-time`). On Windows, `browser.manualLogin` defaults to `true` when omitted.
 
-If the config is missing or invalid, Oracle falls back to defaults and prints a warning for parse errors.
+If the config is missing or invalid, Triangulator falls back to defaults and prints a warning for parse errors.
 
 Chromium-based browsers usually need both `chromePath` (binary) and `chromeCookiePath` (cookie DB) set so automation can launch the right executable and reuse your login. See [docs/chromium-forks.md](chromium-forks.md) for detailed paths per browser/OS.
 
@@ -81,9 +81,9 @@ Each invocation can optionally prune cached sessions before starting new work:
 
 - `--retain-hours <n>` deletes sessions older than `<n>` hours right before the run begins. Use `0` (or omit the flag) to skip pruning.
 - In `config.json`, set `sessionRetentionHours` to apply pruning automatically for every CLI/TUI/MCP invocation.
-- Set `ORACLE_RETAIN_HOURS` in the environment to override the config on shared machines without editing the JSON file.
+- Set `TRIANGULATOR_RETAIN_HOURS` in the environment to override the config on shared machines without editing the JSON file.
 
-Under the hood, pruning removes entire session directories (metadata + logs). The command-line cleanup command (`oracle session --clear`) still exists when you need to wipe everything manually.
+Under the hood, pruning removes entire session directories (metadata + logs). The command-line cleanup command (`triangulator session --clear`) still exists when you need to wipe everything manually.
 
 ## API timeouts
 
@@ -94,5 +94,5 @@ Under the hood, pruning removes entire session directories (metadata + logs). Th
 
 ## Zombie/session staleness
 
-- `--zombie-timeout <ms|s|m|h>` overrides the stale-session cutoff used by `oracle status`.
+- `--zombie-timeout <ms|s|m|h>` overrides the stale-session cutoff used by `triangulator status`.
 - `--zombie-last-activity` uses last log activity instead of start time to detect stale sessions.

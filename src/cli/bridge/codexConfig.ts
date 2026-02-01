@@ -24,7 +24,7 @@ export async function runBridgeCodexConfig(options: BridgeCodexConfigCliOptions)
   console.log(snippet);
   if (!options.printToken) {
     console.log('');
-    console.log(chalk.dim('Tip: rerun with --print-token to include ORACLE_REMOTE_TOKEN in the snippet.'));
+    console.log(chalk.dim('Tip: rerun with --print-token to include TRIANGULATOR_REMOTE_TOKEN in the snippet.'));
   }
 }
 
@@ -43,20 +43,19 @@ export function formatCodexMcpSnippet({
   return [
     '# ~/.codex/config.toml',
     '',
-    '[mcp.servers.oracle]',
-    'command = "oracle-mcp"',
+    '[mcp.servers.triangulator]',
+    'command = "triangulator-mcp"',
     'args = []',
-    `env = { ORACLE_ENGINE = "browser", ORACLE_REMOTE_HOST = "${escapeTomlString(hostValue)}", ORACLE_REMOTE_TOKEN = "${escapeTomlString(tokenValue)}" }`,
+    `env = { TRIANGULATOR_ENGINE = "browser", TRIANGULATOR_REMOTE_HOST = "${escapeTomlString(hostValue)}", TRIANGULATOR_REMOTE_TOKEN = "${escapeTomlString(tokenValue)}" }`,
     '',
     '# If you prefer npx:',
-    '# [mcp.servers.oracle]',
+    '# [mcp.servers.triangulator]',
     '# command = "npx"',
-    '# args = ["-y", "@steipete/oracle", "oracle-mcp"]',
-    `# env = { ORACLE_ENGINE = "browser", ORACLE_REMOTE_HOST = "${escapeTomlString(hostValue)}", ORACLE_REMOTE_TOKEN = "${escapeTomlString(tokenValue)}" }`,
+    '# args = ["-y", "triangulator", "triangulator-mcp"]',
+    `# env = { TRIANGULATOR_ENGINE = "browser", TRIANGULATOR_REMOTE_HOST = "${escapeTomlString(hostValue)}", TRIANGULATOR_REMOTE_TOKEN = "${escapeTomlString(tokenValue)}" }`,
   ].join('\n');
 }
 
 function escapeTomlString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
-

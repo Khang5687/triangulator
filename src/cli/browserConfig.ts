@@ -2,18 +2,24 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { BrowserSessionConfig } from '../sessionStore.js';
 import type { ModelName, ThinkingTimeLevel } from '../oracle.js';
-import { CHATGPT_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET, isTemporaryChatUrl, normalizeChatgptUrl, parseDuration } from '../browserMode.js';
+import {
+  PERPLEXITY_URL,
+  DEFAULT_MODEL_STRATEGY,
+  DEFAULT_MODEL_TARGET,
+  normalizePerplexityUrl,
+  parseDuration,
+} from '../browserMode.js';
 import { normalizeBrowserModelStrategy } from '../browser/modelStrategy.js';
 import type { BrowserModelStrategy } from '../browser/types.js';
 import type { CookieParam } from '../browser/types.js';
-import { getOracleHomeDir } from '../oracleHome.js';
+import { getTriangulatorHomeDir } from '../oracleHome.js';
 
 const DEFAULT_BROWSER_TIMEOUT_MS = 1_200_000;
 const DEFAULT_BROWSER_INPUT_TIMEOUT_MS = 60_000;
 const DEFAULT_CHROME_PROFILE = 'Default';
 
 // Ordered array: most specific models first to ensure correct selection.
-// The browser label is passed to the model picker which fuzzy-matches against ChatGPT's UI.
+// The browser label is passed to the model picker which fuzzy-matches against the web UI.
 const BROWSER_MODEL_LABELS: [ModelName, string][] = [
   // Most specific first (e.g., "gpt-5.2-thinking" before "gpt-5.2")
   ['gpt-5.2-thinking', 'GPT-5.2 Thinking'],
@@ -22,7 +28,7 @@ const BROWSER_MODEL_LABELS: [ModelName, string][] = [
   ['gpt-5.1-pro', 'GPT-5.2 Pro'],
   ['gpt-5-pro', 'GPT-5.2 Pro'],
   // Base models last (least specific)
-  ['gpt-5.2', 'GPT-5.2'],       // Selects "Auto" in ChatGPT UI
+  ['gpt-5.2', 'GPT-5.2'],       // Selects "Auto" in the web UI
   ['gpt-5.1', 'GPT-5.2'],       // Legacy alias → Auto
   ['gemini-3-pro', 'Gemini 3 Pro'],
 ];
@@ -31,6 +37,8 @@ export interface BrowserFlagOptions {
   browserChromeProfile?: string;
   browserChromePath?: string;
   browserCookiePath?: string;
+  perplexityUrl?: string;
+  /** Legacy alias (Oracle). */
   chatgptUrl?: string;
   browserUrl?: string;
   browserTimeout?: string;
@@ -57,13 +65,13 @@ export interface BrowserFlagOptions {
   verbose?: boolean;
 }
 
-export function normalizeChatGptModelForBrowser(model: ModelName): ModelName {
+export function normalizeModelForBrowser(model: ModelName): ModelName {
   const normalized = model.toLowerCase() as ModelName;
   if (!normalized.startsWith('gpt-') || normalized.includes('codex')) {
     return model;
   }
 
-  // Pro variants: always resolve to the latest Pro model in ChatGPT.
+  // Pro variants: always resolve to the latest Pro model.
   if (normalized === 'gpt-5-pro' || normalized === 'gpt-5.1-pro' || normalized.endsWith('-pro')) {
     return 'gpt-5.2-pro';
   }
@@ -85,16 +93,19 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
   const desiredModelOverride = options.browserModelLabel?.trim();
   const normalizedOverride = desiredModelOverride?.toLowerCase() ?? '';
   const baseModel = options.model.toLowerCase();
-  const isChatGptModel = baseModel.startsWith('gpt-') && !baseModel.includes('codex');
-  const shouldUseOverride = !isChatGptModel && normalizedOverride.length > 0 && normalizedOverride !== baseModel;
-  const modelStrategy =
-    normalizeBrowserModelStrategy(options.browserModelStrategy) ?? DEFAULT_MODEL_STRATEGY;
-  const cookieNames = parseCookieNames(options.browserCookieNames ?? process.env.ORACLE_BROWSER_COOKIE_NAMES);
+  const isPickerModel = baseModel.startsWith('gpt-') && !baseModel.includes('codex');
+  const shouldUseOverride = !isPickerModel && normalizedOverride.length > 0 && normalizedOverride !== baseModel;
+  const modelStrategy = normalizeBrowserModelStrategy(options.browserModelStrategy) ?? DEFAULT_MODEL_STRATEGY;
+  const cookieNames = parseCookieNames(
+    options.browserCookieNames ??
+      process.env.TRIANGULATOR_BROWSER_COOKIE_NAMES ??
+      process.env.ORACLE_BROWSER_COOKIE_NAMES,
+  );
   let inline = await resolveInlineCookies({
     inlineArg: options.browserInlineCookies,
     inlineFileArg: options.browserInlineCookiesFile,
-    envPayload: process.env.ORACLE_BROWSER_COOKIES_JSON,
-    envFile: process.env.ORACLE_BROWSER_COOKIES_FILE,
+    envPayload: process.env.TRIANGULATOR_BROWSER_COOKIES_JSON ?? process.env.ORACLE_BROWSER_COOKIES_JSON,
+    envFile: process.env.TRIANGULATOR_BROWSER_COOKIES_FILE ?? process.env.ORACLE_BROWSER_COOKIES_FILE,
     cwd: process.cwd(),
   });
   if (inline?.source?.startsWith('home:') && options.browserNoCookieSync !== true) {
@@ -105,21 +116,14 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
   if (options.remoteChrome) {
     remoteChrome = parseRemoteChromeTarget(options.remoteChrome);
   }
-  const rawUrl = options.chatgptUrl ?? options.browserUrl;
-  const url = rawUrl ? normalizeChatgptUrl(rawUrl, CHATGPT_URL) : undefined;
+  const rawUrl = options.perplexityUrl ?? options.chatgptUrl ?? options.browserUrl;
+  const url = rawUrl ? normalizePerplexityUrl(rawUrl, PERPLEXITY_URL) : undefined;
 
-  const desiredModel = isChatGptModel
+  const desiredModel = isPickerModel
     ? mapModelToBrowserLabel(options.model)
     : shouldUseOverride
       ? desiredModelOverride
       : mapModelToBrowserLabel(options.model);
-
-  if (modelStrategy === 'select' && url && isTemporaryChatUrl(url) && /\bpro\b/i.test(desiredModel ?? '')) {
-    throw new Error(
-      'Temporary Chat mode does not expose Pro models in the ChatGPT model picker. ' +
-        'Remove "temporary-chat=true" from --chatgpt-url (or omit --chatgpt-url), or use a non-Pro model (e.g. --model gpt-5.2).',
-    );
-  }
 
   return {
     chromeProfile: options.browserChromeProfile ?? DEFAULT_CHROME_PROFILE,
@@ -161,7 +165,7 @@ function selectBrowserPort(options: BrowserFlagOptions): number | null {
 }
 
 export function mapModelToBrowserLabel(model: ModelName): string {
-  const normalized = normalizeChatGptModelForBrowser(model);
+  const normalized = normalizeModelForBrowser(model);
   // Iterate ordered array to find first match (most specific first)
   for (const [key, label] of BROWSER_MODEL_LABELS) {
     if (key === normalized) {
@@ -280,11 +284,11 @@ async function resolveInlineCookies({
     if (parsed) return { cookies: parsed, source };
   }
 
-  // fallback: ~/.oracle/cookies.{json,base64}
-  const oracleHome = getOracleHomeDir();
+  // fallback: ~/.triangulator/cookies.{json,base64}
+  const triHome = getTriangulatorHomeDir();
   const candidates = ['cookies.json', 'cookies.base64'];
   for (const file of candidates) {
-    const fullPath = path.join(oracleHome, file);
+    const fullPath = path.join(triHome, file);
     try {
       const stat = await fs.stat(fullPath);
       if (!stat.isFile()) continue;

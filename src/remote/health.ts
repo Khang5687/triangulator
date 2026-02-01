@@ -76,7 +76,7 @@ export async function checkRemoteHealth({
       return {
         ok: false,
         statusCode: response.statusCode,
-        error: 'remote host does not expose /health (upgrade oracle on the host and retry)',
+        error: 'remote host does not expose /health (upgrade triangulator on the host and retry)',
       };
     }
     const error = extractErrorMessage(response.json, response.bodyText) ?? `HTTP ${response.statusCode}`;

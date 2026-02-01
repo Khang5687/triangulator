@@ -11,7 +11,7 @@ import { registerSessionResources } from './tools/sessionResources.js';
 export async function startMcpServer(): Promise<void> {
   const server = new McpServer(
     {
-      name: 'oracle-mcp',
+      name: 'triangulator-mcp',
       version: getCliVersion(),
     },
     {
@@ -40,9 +40,13 @@ export async function startMcpServer(): Promise<void> {
   await closed;
 }
 
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('oracle-mcp')) {
+if (
+  import.meta.url === `file://${process.argv[1]}` ||
+  process.argv[1]?.endsWith('triangulator-mcp') ||
+  process.argv[1]?.endsWith('oracle-mcp')
+) {
   startMcpServer().catch((error) => {
-    console.error('Failed to start oracle-mcp:', error);
+    console.error('Failed to start triangulator-mcp:', error);
     process.exitCode = 1;
   });
 }

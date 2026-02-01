@@ -23,6 +23,8 @@ export interface BrowserAutomationConfig {
   chromePath?: string | null;
   chromeCookiePath?: string | null;
   url?: string;
+  perplexityUrl?: string | null;
+  /** Legacy config key (Oracle). */
   chatgptUrl?: string | null;
   timeoutMs?: number;
   debugPort?: number | null;
@@ -51,7 +53,7 @@ export interface BrowserRunOptions {
   prompt: string;
   attachments?: BrowserAttachment[];
   /**
-   * Optional secondary submission to try if the initial prompt is rejected by ChatGPT
+   * Optional secondary submission to try if the initial prompt is rejected by the browser composer
    * (e.g. inline file paste exceeds composer limits). Intended for auto inline->upload fallback.
    */
   fallbackSubmission?: { prompt: string; attachments: BrowserAttachment[] };

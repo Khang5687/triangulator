@@ -21,7 +21,7 @@ async function readSessionLogTail(sessionId: string, maxBytes: number): Promise<
   }
 }
 import { performSessionRun } from '../../cli/sessionRunner.js';
-import { CHATGPT_URL } from '../../browser/constants.js';
+import { PERPLEXITY_URL } from '../../browser/constants.js';
 import { consultInputSchema } from '../types.js';
 import { loadUserConfig } from '../../config.js';
 import { resolveNotificationSettings } from '../../cli/notifier.js';
@@ -51,19 +51,19 @@ const consultInputShape = {
     .enum(['api', 'browser'])
     .optional()
     .describe(
-      'Execution engine. `api` uses OpenAI/other providers. `browser` automates the ChatGPT web UI (supports attachments and ChatGPT-only model labels).',
+      'Execution engine. `api` uses OpenAI/other providers. `browser` automates the Perplexity web UI (supports attachments).',
     ),
   browserModelLabel: z
     .string()
     .optional()
     .describe(
-      'Browser-only: explicit ChatGPT UI label to select (overrides model mapping). Example: "GPT-5.2 Thinking".',
+      'Browser-only: explicit UI label to select (overrides model mapping). Example: "GPT-5.2 Thinking".',
     ),
   browserAttachments: z
     .enum(['auto', 'never', 'always'])
     .optional()
     .describe(
-      'Browser-only: how to deliver `files`. Use "always" for real ChatGPT file uploads (including images/PDFs). Use "never" to paste file contents inline. "auto" chooses based on prompt size.',
+      'Browser-only: how to deliver `files`. Use "always" for real file uploads (including images/PDFs). Use "never" to paste file contents inline. "auto" chooses based on prompt size.',
     ),
   browserBundleFiles: z
     .boolean()
@@ -72,7 +72,7 @@ const consultInputShape = {
   browserThinkingTime: z
     .enum(['light', 'standard', 'extended', 'heavy'])
     .optional()
-    .describe('Browser-only: set ChatGPT thinking time when supported by the chosen model.'),
+    .describe('Browser-only: set thinking time when supported by the chosen model.'),
   browserKeepBrowser: z
     .boolean()
     .optional()
@@ -84,7 +84,7 @@ const consultInputShape = {
   slug: z
     .string()
     .optional()
-    .describe('Optional human-friendly session id (used for later `oracle sessions` lookups).'),
+    .describe('Optional human-friendly session id (used for later `triangulator sessions` lookups).'),
 } satisfies z.ZodRawShape;
 
 const consultModelSummaryShape = z.object({
@@ -163,9 +163,9 @@ export function registerConsultTool(server: McpServer): void {
   server.registerTool(
     'consult',
     {
-      title: 'Run an oracle session',
+      title: 'Run a triangulator session',
       description:
-        'Run a one-shot Oracle session (API or ChatGPT browser automation). Use `files` to attach project context. For browser-based image/file uploads, set `browserAttachments:"always"`. Sessions are stored under `ORACLE_HOME_DIR` (shared with the CLI).',
+        'Run a one-shot Triangulator session (API or Perplexity browser automation). Use `files` to attach project context. For browser-based image/file uploads, set `browserAttachments:"always"`. Sessions are stored under `TRIANGULATOR_HOME_DIR` (shared with the CLI).',
       // Cast to any to satisfy SDK typings across differing Zod versions.
       inputSchema: consultInputShape,
       outputSchema: consultOutputShape,
@@ -216,7 +216,7 @@ export function registerConsultTool(server: McpServer): void {
           return {
             isError: true,
             content: textContent(
-              `Remote host configured (${resolvedRemote.host}) but remote token is missing. Run \`oracle bridge client --connect <...>\` or set ORACLE_REMOTE_TOKEN.`,
+              `Remote host configured (${resolvedRemote.host}) but remote token is missing. Run \`triangulator bridge client --connect <...>\` or set TRIANGULATOR_REMOTE_TOKEN (legacy ORACLE_REMOTE_TOKEN also works).`,
             ),
           };
         }
@@ -227,18 +227,22 @@ export function registerConsultTool(server: McpServer): void {
 
       let browserConfig: BrowserSessionConfig | undefined;
       if (resolvedEngine === 'browser') {
-        const envProfileDir = (process.env.ORACLE_BROWSER_PROFILE_DIR ?? '').trim();
+        const envProfileDir = (process.env.TRIANGULATOR_BROWSER_PROFILE_DIR ?? process.env.ORACLE_BROWSER_PROFILE_DIR ?? '').trim();
         const hasProfileDir = envProfileDir.length > 0;
         const preferredLabel = (browserModelLabel ?? model)?.trim();
-        const isChatGptModel = runOptions.model.startsWith('gpt-') && !runOptions.model.includes('codex');
-        const desiredModelLabel = isChatGptModel
+        const isPickerModel = runOptions.model.startsWith('gpt-') && !runOptions.model.includes('codex');
+        const desiredModelLabel = isPickerModel
           ? mapModelToBrowserLabel(runOptions.model)
           : resolveBrowserModelLabel(preferredLabel, runOptions.model);
-        const configuredUrl = userConfig.browser?.chatgptUrl ?? userConfig.browser?.url ?? undefined;
+        const configuredUrl =
+          userConfig.browser?.perplexityUrl ??
+          userConfig.browser?.chatgptUrl ??
+          userConfig.browser?.url ??
+          undefined;
         // Default to manual-login when a persistent profile dir is provided (common for Codex/Claude).
         const manualLogin = hasProfileDir;
         browserConfig = {
-          url: configuredUrl ?? CHATGPT_URL,
+          url: configuredUrl ?? PERPLEXITY_URL,
           cookieSync: !manualLogin,
           headless: false,
           hideWindow: false,

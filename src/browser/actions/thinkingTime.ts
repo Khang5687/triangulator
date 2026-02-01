@@ -12,7 +12,7 @@ type ThinkingTimeOutcome =
   | { status: 'option-not-found' };
 
 /**
- * Selects a specific thinking time level in ChatGPT's composer pill menu.
+ * Selects a specific thinking time level in the composer pill menu.
  * @param level - The thinking time intensity: 'light', 'standard', 'extended', or 'heavy'
  */
 export async function ensureThinkingTime(
@@ -50,7 +50,7 @@ export async function ensureThinkingTime(
 }
 
 /**
- * Best-effort selection of a thinking time level in ChatGPT's composer pill menu.
+ * Best-effort selection of a thinking time level in the composer pill menu.
  * Safe by default: if the pill/menu/option isn't present, we continue without throwing.
  * @param level - The thinking time intensity: 'light', 'standard', 'extended', or 'heavy'
  */

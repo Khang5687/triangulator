@@ -1,7 +1,7 @@
-import { CHATGPT_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET } from './constants.js';
+import { PERPLEXITY_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET } from './constants.js';
 import { normalizeBrowserModelStrategy } from './modelStrategy.js';
 import type { BrowserAutomationConfig, ResolvedBrowserConfig } from './types.js';
-import { isTemporaryChatUrl, normalizeChatgptUrl } from './utils.js';
+import { normalizePerplexityUrl } from './utils.js';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -9,8 +9,8 @@ export const DEFAULT_BROWSER_CONFIG: ResolvedBrowserConfig = {
   chromeProfile: null,
   chromePath: null,
   chromeCookiePath: null,
-  url: CHATGPT_URL,
-  chatgptUrl: CHATGPT_URL,
+  url: PERPLEXITY_URL,
+  perplexityUrl: PERPLEXITY_URL,
   timeoutMs: 1_200_000,
   debugPort: null,
   inputTimeoutMs: 60_000,
@@ -34,36 +34,37 @@ export const DEFAULT_BROWSER_CONFIG: ResolvedBrowserConfig = {
 
 export function resolveBrowserConfig(config: BrowserAutomationConfig | undefined): ResolvedBrowserConfig {
   const debugPortEnv = parseDebugPort(
-    process.env.ORACLE_BROWSER_PORT ?? process.env.ORACLE_BROWSER_DEBUG_PORT,
+    process.env.TRIANGULATOR_BROWSER_PORT ??
+      process.env.TRIANGULATOR_BROWSER_DEBUG_PORT ??
+      process.env.ORACLE_BROWSER_PORT ??
+      process.env.ORACLE_BROWSER_DEBUG_PORT,
   );
   const envAllowCookieErrors =
+    (process.env.TRIANGULATOR_BROWSER_ALLOW_COOKIE_ERRORS ?? '').trim().toLowerCase() === 'true' ||
+    (process.env.TRIANGULATOR_BROWSER_ALLOW_COOKIE_ERRORS ?? '').trim() === '1' ||
     (process.env.ORACLE_BROWSER_ALLOW_COOKIE_ERRORS ?? '').trim().toLowerCase() === 'true' ||
     (process.env.ORACLE_BROWSER_ALLOW_COOKIE_ERRORS ?? '').trim() === '1';
-  const rawUrl = config?.chatgptUrl ?? config?.url ?? DEFAULT_BROWSER_CONFIG.url;
-  const normalizedUrl = normalizeChatgptUrl(rawUrl ?? DEFAULT_BROWSER_CONFIG.url, DEFAULT_BROWSER_CONFIG.url);
+  const rawUrl =
+    config?.perplexityUrl ?? config?.chatgptUrl ?? config?.url ?? DEFAULT_BROWSER_CONFIG.url;
+  const normalizedUrl = normalizePerplexityUrl(rawUrl ?? DEFAULT_BROWSER_CONFIG.url, DEFAULT_BROWSER_CONFIG.url);
   const desiredModel = config?.desiredModel ?? DEFAULT_BROWSER_CONFIG.desiredModel ?? DEFAULT_MODEL_TARGET;
   const modelStrategy =
     normalizeBrowserModelStrategy(config?.modelStrategy) ??
     DEFAULT_BROWSER_CONFIG.modelStrategy ??
     DEFAULT_MODEL_STRATEGY;
-  if (modelStrategy === 'select' && isTemporaryChatUrl(normalizedUrl) && /\bpro\b/i.test(desiredModel)) {
-    throw new Error(
-      'Temporary Chat mode does not expose Pro models in the ChatGPT model picker. ' +
-        'Remove "temporary-chat=true" from your browser URL, or use a non-Pro model label (e.g. "GPT-5.2").',
-    );
-  }
   const isWindows = process.platform === 'win32';
   const manualLogin = config?.manualLogin ?? (isWindows ? true : DEFAULT_BROWSER_CONFIG.manualLogin);
   const cookieSyncDefault = isWindows ? false : DEFAULT_BROWSER_CONFIG.cookieSync;
   const resolvedProfileDir =
     config?.manualLoginProfileDir ??
+    process.env.TRIANGULATOR_BROWSER_PROFILE_DIR ??
     process.env.ORACLE_BROWSER_PROFILE_DIR ??
-    path.join(os.homedir(), '.oracle', 'browser-profile');
+    path.join(os.homedir(), '.triangulator', 'browser-profile');
   return {
     ...DEFAULT_BROWSER_CONFIG,
     ...(config ?? {}),
     url: normalizedUrl,
-    chatgptUrl: normalizedUrl,
+    perplexityUrl: normalizedUrl,
     timeoutMs: config?.timeoutMs ?? DEFAULT_BROWSER_CONFIG.timeoutMs,
     debugPort: config?.debugPort ?? debugPortEnv ?? DEFAULT_BROWSER_CONFIG.debugPort,
     inputTimeoutMs: config?.inputTimeoutMs ?? DEFAULT_BROWSER_CONFIG.inputTimeoutMs,

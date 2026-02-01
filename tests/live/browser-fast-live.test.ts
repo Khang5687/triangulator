@@ -6,47 +6,47 @@ import { runBrowserMode } from '../../src/browser/index.js';
 import { acquireLiveTestLock, releaseLiveTestLock } from './liveLock.js';
 import { getCookies } from '@steipete/sweet-cookie';
 
-const LIVE = process.env.ORACLE_LIVE_TEST === '1';
-const FAST = process.env.ORACLE_LIVE_TEST_FAST === '1';
+const LIVE = process.env.TRIANGULATOR_LIVE_TEST === '1' || process.env.ORACLE_LIVE_TEST === '1';
+const FAST = process.env.TRIANGULATOR_LIVE_TEST_FAST === '1' || process.env.ORACLE_LIVE_TEST_FAST === '1';
 
-async function hasChatGptSession(): Promise<boolean> {
+async function hasPerplexitySession(): Promise<boolean> {
   try {
     const { cookies } = await getCookies({
-      url: 'https://chatgpt.com',
-      origins: ['https://chatgpt.com', 'https://chat.openai.com', 'https://atlas.openai.com'],
+      url: 'https://www.perplexity.ai',
+      origins: ['https://www.perplexity.ai'],
       browsers: ['chrome'],
       mode: 'merge',
       chromeProfile: 'Default',
       timeoutMs: 5_000,
     });
-    return cookies.some((cookie) => cookie.name.startsWith('__Secure-next-auth.session-token'));
+    return cookies.length > 0;
   } catch {
     return false;
   }
 }
 
-(LIVE && FAST ? describe : describe.skip)('ChatGPT browser fast live', () => {
+(LIVE && FAST ? describe : describe.skip)('Perplexity browser fast live', () => {
   test(
     'falls back when a project URL is missing',
     async () => {
-      if (!(await hasChatGptSession())) {
-        console.warn('Skipping fast live test (missing ChatGPT session cookie).');
+      if (!(await hasPerplexitySession())) {
+        console.warn('Skipping fast live test (missing Perplexity session cookie).');
         return;
       }
-      await acquireLiveTestLock('chatgpt-browser');
+      await acquireLiveTestLock('perplexity-browser');
       try {
         const promptToken = `fast fallback ${Date.now()}`;
         const result = await runBrowserMode({
           prompt: `${promptToken}\nReply with OK only.`,
           config: {
-            url: 'https://chatgpt.com/g/does-not-exist/project',
+            url: 'https://www.perplexity.ai/spaces/does-not-exist',
             timeoutMs: 180_000,
             inputTimeoutMs: 20_000,
           },
         });
         expect(result.answerText.toLowerCase()).toContain('ok');
       } finally {
-        await releaseLiveTestLock('chatgpt-browser');
+        await releaseLiveTestLock('perplexity-browser');
       }
     },
     6 * 60 * 1000,
@@ -55,15 +55,15 @@ async function hasChatGptSession(): Promise<boolean> {
   test(
     'uploads attachments and sends the prompt (gpt-5.2)',
     async () => {
-      if (!(await hasChatGptSession())) {
-        console.warn('Skipping fast live test (missing ChatGPT session cookie).');
+      if (!(await hasPerplexitySession())) {
+        console.warn('Skipping fast live test (missing Perplexity session cookie).');
         return;
       }
-      const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'oracle-fast-live-'));
-      await acquireLiveTestLock('chatgpt-browser');
+      const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'triangulator-fast-live-'));
+      await acquireLiveTestLock('perplexity-browser');
       try {
-        const fileA = path.join(tmpDir, 'oracle-fast-a.txt');
-        const fileB = path.join(tmpDir, 'oracle-fast-b.txt');
+        const fileA = path.join(tmpDir, 'triangulator-fast-a.txt');
+        const fileB = path.join(tmpDir, 'triangulator-fast-b.txt');
         await writeFile(fileA, `fast file a ${Date.now()}`);
         await writeFile(fileB, `fast file b ${Date.now()}`);
         const [statA, statB] = await Promise.all([stat(fileA), stat(fileB)]);
@@ -71,8 +71,8 @@ async function hasChatGptSession(): Promise<boolean> {
         const result = await runBrowserMode({
           prompt: `${promptToken}\nReply with OK only.`,
           attachments: [
-            { path: fileA, displayPath: 'oracle-fast-a.txt', sizeBytes: statA.size },
-            { path: fileB, displayPath: 'oracle-fast-b.txt', sizeBytes: statB.size },
+            { path: fileA, displayPath: 'triangulator-fast-a.txt', sizeBytes: statA.size },
+            { path: fileB, displayPath: 'triangulator-fast-b.txt', sizeBytes: statB.size },
           ],
           config: {
             timeoutMs: 240_000,
@@ -81,7 +81,7 @@ async function hasChatGptSession(): Promise<boolean> {
         });
         expect(result.answerText.toLowerCase()).toContain('ok');
       } finally {
-        await releaseLiveTestLock('chatgpt-browser');
+        await releaseLiveTestLock('perplexity-browser');
         await rm(tmpDir, { recursive: true, force: true });
       }
     },

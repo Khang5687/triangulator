@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 import { Command, Option } from 'commander';
 import type { OptionValues } from 'commander';
-// Allow `npx @steipete/oracle oracle-mcp` to resolve the MCP server even though npx runs the default binary.
-if (process.argv[2] === 'oracle-mcp') {
+// Allow `npx triangulator triangulator-mcp` to resolve the MCP server even though npx runs the default binary.
+if (process.argv[2] === 'triangulator-mcp' || process.argv[2] === 'oracle-mcp') {
   const { startMcpServer } = await import('../src/mcp/server.js');
   await startMcpServer();
   process.exit(0);
@@ -19,7 +19,7 @@ import { sessionStore, pruneOldSessions } from '../src/sessionStore.js';
 import { DEFAULT_MODEL, MODEL_CONFIGS, runOracle, readFiles, estimateRequestTokens, buildRequestBody } from '../src/oracle.js';
 import { isKnownModel } from '../src/oracle/modelResolver.js';
 import type { ModelName, PreviewMode, RunOracleOptions } from '../src/oracle.js';
-import { CHATGPT_URL, normalizeChatgptUrl } from '../src/browserMode.js';
+import { PERPLEXITY_URL } from '../src/browserMode.js';
 import { createRemoteBrowserExecutor } from '../src/remote/client.js';
 import { createGeminiWebExecutor } from '../src/gemini-web/index.js';
 import { applyHelpStyling } from '../src/cli/help.js';
@@ -112,6 +112,7 @@ interface CliOptions extends OptionValues {
   browserChromeProfile?: string;
   browserChromePath?: string;
   browserCookiePath?: string;
+  perplexityUrl?: string;
   chatgptUrl?: string;
   browserUrl?: string;
   browserTimeout?: string;
@@ -194,7 +195,7 @@ program.hook('preAction', (thisCommand) => {
     return;
   }
   if (userCliArgs.length === 0) {
-    // Let the root action handle zero-arg entry (help + hint to `oracle tui`).
+    // Let the root action handle zero-arg entry (help + hint to `triangulator tui`).
     return;
   }
   const opts = thisCommand.optsWithGlobals() as CliOptions;
@@ -212,7 +213,7 @@ program.hook('preAction', (thisCommand) => {
   }
 });
 program
-  .name('oracle')
+  .name('triangulator')
   .description('One-shot GPT-5.2 Pro / GPT-5.2 / GPT-5.1 Codex tool for hard questions that benefit from large file context and server-side search.')
   .version(VERSION)
   .argument('[prompt]', 'Prompt text (shorthand for --prompt).')
@@ -258,7 +259,7 @@ program
   .option('-s, --slug <words>', 'Custom session slug (3-5 words).')
   .option(
     '-m, --model <model>',
-    'Model to target (gpt-5.2-pro default; also supports gpt-5.1-pro alias). Also gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus, or ChatGPT labels like "5.2 Thinking" for browser runs).',
+    'Model to target (gpt-5.2-pro default; also supports gpt-5.1-pro alias). Also gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus, or browser labels like "5.2 Thinking" (ignored for Perplexity browser runs).',
     normalizeModelOption,
   )
   .addOption(
@@ -272,7 +273,7 @@ program
   .addOption(
     new Option(
       '-e, --engine <mode>',
-      'Execution engine (api | browser). Browser engine: GPT models automate ChatGPT; Gemini models use a cookie-based client for gemini.google.com. If omitted, oracle picks api when OPENAI_API_KEY is set, otherwise browser.',
+      'Execution engine (api | browser). Browser engine: GPT models automate Perplexity; Gemini models use a cookie-based client for gemini.google.com. If omitted, triangulator picks api when OPENAI_API_KEY is set, otherwise browser.',
     ).choices(['api', 'browser'])
   )
   .addOption(
@@ -306,7 +307,7 @@ program
   .addOption(
     new Option(
       '--zombie-timeout <ms|s|m|h>',
-      'Override stale-session cutoff used by `oracle status` (default 60m).',
+      'Override stale-session cutoff used by `triangulator status` (default 60m).',
     )
       .argParser((value) => parseDurationOption(value, 'Zombie timeout'))
       .default(undefined),
@@ -333,7 +334,7 @@ program
   )
   .addOption(new Option('--exec-session <id>').hideHelp())
   .addOption(new Option('--session <id>').hideHelp())
-  .addOption(new Option('--status', 'Show stored sessions (alias for `oracle status`).').default(false).hideHelp())
+  .addOption(new Option('--status', 'Show stored sessions (alias for `triangulator status`).').default(false).hideHelp())
   .option(
     '--render-markdown',
     'Print the assembled markdown bundle for prompt + files and exit; pair with --copy to put it on the clipboard.',
@@ -376,11 +377,12 @@ program
   )
   .addOption(
     new Option(
-      '--chatgpt-url <url>',
-      `Override the ChatGPT web URL (e.g., workspace/folder like https://chatgpt.com/g/.../project; default ${CHATGPT_URL}).`,
+      '--perplexity-url <url>',
+      `Override the Perplexity Spaces URL (e.g., https://www.perplexity.ai/spaces/...; default ${PERPLEXITY_URL}).`,
     ),
   )
-  .addOption(new Option('--browser-url <url>', `Alias for --chatgpt-url (default ${CHATGPT_URL}).`).hideHelp())
+  .addOption(new Option('--chatgpt-url <url>', 'Legacy alias for --perplexity-url.').hideHelp())
+  .addOption(new Option('--browser-url <url>', `Alias for --perplexity-url (default ${PERPLEXITY_URL}).`).hideHelp())
   .addOption(new Option('--browser-timeout <ms|s|m>', 'Maximum time to wait for an answer (default 1200s / 20m).').hideHelp())
   .addOption(
     new Option('--browser-input-timeout <ms|s|m>', 'Maximum time to wait for the prompt textarea (default 30s).').hideHelp(),
@@ -409,7 +411,7 @@ program
   .addOption(
     new Option(
       '--browser-manual-login',
-      'Skip cookie copy; reuse a persistent automation profile and wait for manual ChatGPT login.',
+      'Skip cookie copy; reuse a persistent automation profile and wait for manual Perplexity login.',
     ).hideHelp(),
   )
   .addOption(new Option('--browser-headless', 'Launch Chrome in headless mode.').hideHelp())
@@ -418,7 +420,7 @@ program
   .addOption(
     new Option(
       '--browser-model-strategy <mode>',
-      'ChatGPT model picker strategy: select (default) switches to the requested model, current keeps the active model, ignore skips the picker entirely.',
+      'Browser model picker strategy: select (default) switches to the requested model, current keeps the active model, ignore skips the picker entirely (Perplexity ignores this).',
     ).choices(['select', 'current', 'ignore']),
   )
   .addOption(
@@ -443,8 +445,8 @@ program
       'Connect to remote Chrome DevTools Protocol (e.g., 192.168.1.10:9222 or [2001:db8::1]:9222 for IPv6).',
     ),
   )
-  .addOption(new Option('--remote-host <host:port>', 'Delegate browser runs to a remote `oracle serve` instance.'))
-  .addOption(new Option('--remote-token <token>', 'Access token for the remote `oracle serve` instance.'))
+  .addOption(new Option('--remote-host <host:port>', 'Delegate browser runs to a remote `triangulator serve` instance.'))
+  .addOption(new Option('--remote-token <token>', 'Access token for the remote `triangulator serve` instance.'))
   .addOption(
     new Option('--browser-inline-files', 'Alias for --browser-attachments never (force pasting file contents inline).').default(false),
   )
@@ -487,25 +489,25 @@ program.addHelpText(
   `
 Examples:
   # Quick API run with two files
-  oracle --prompt "Summarize the risk register" --file docs/risk-register.md docs/risk-matrix.md
+  triangulator --prompt "Summarize the risk register" --file docs/risk-register.md docs/risk-matrix.md
 
   # Browser run (no API key) + globbed TypeScript sources, excluding tests
-  oracle --engine browser --prompt "Review the TS data layer" \\
+  triangulator --engine browser --prompt "Review the TS data layer" \\
     --file "src/**/*.ts" --file "!src/**/*.test.ts"
 
   # Build, print, and copy a markdown bundle (semi-manual)
-  oracle --render --copy -p "Review the TS data layer" --file "src/**/*.ts" --file "!src/**/*.test.ts"
+  triangulator --render --copy -p "Review the TS data layer" --file "src/**/*.ts" --file "!src/**/*.test.ts"
 `,
 );
 
 program
   .command('serve')
-  .description('Run Oracle browser automation as a remote service for other machines.')
+  .description('Run Triangulator browser automation as a remote service for other machines.')
   .option('--host <address>', 'Interface to bind (default 0.0.0.0).')
   .option('--port <number>', 'Port to listen on (default random).', parseIntOption)
   .option('--token <value>', 'Access token clients must provide (random if omitted).')
   .option('--manual-login', 'Use a dedicated Chrome profile for manual login (recommended when cookie sync is unavailable).', false)
-  .option('--manual-login-profile-dir <path>', 'Chrome profile directory for manual login (default ~/.oracle/browser-profile).')
+  .option('--manual-login-profile-dir <path>', 'Chrome profile directory for manual login (default ~/.triangulator/browser-profile).')
   .action(async (commandOptions) => {
     const { serveRemote } = await import('../src/remote/server.js');
     await serveRemote({
@@ -517,14 +519,14 @@ program
     });
   });
 
-const bridgeCommand = program.command('bridge').description('Bridge a Windows-hosted ChatGPT session to Linux clients.');
+const bridgeCommand = program.command('bridge').description('Bridge a Windows-hosted Perplexity session to Linux clients.');
 
 bridgeCommand
   .command('host')
-  .description('Start a secure oracle serve host (optionally with an SSH reverse tunnel).')
+  .description('Start a secure triangulator serve host (optionally with an SSH reverse tunnel).')
   .option('--bind <host:port>', 'Local bind address for the host service (default 127.0.0.1:9473).')
   .option('--token <token|auto>', 'Service access token (default auto).', 'auto')
-  .option('--write-connection <path>', 'Write a connection artifact JSON (default ~/.oracle/bridge-connection.json).')
+  .option('--write-connection <path>', 'Write a connection artifact JSON (default ~/.triangulator/bridge-connection.json).')
   .option('--ssh <user@host>', 'Maintain an SSH reverse tunnel to the Linux host (ssh -N -R ...).')
   .option('--ssh-remote-port <port>', 'Remote port to bind on the Linux host (default matches --bind port).', parseIntOption)
   .option('--ssh-identity <path>', 'SSH identity file (ssh -i).')
@@ -540,10 +542,10 @@ bridgeCommand
 
 bridgeCommand
   .command('client')
-  .description('Configure this machine to use a remote oracle serve host.')
+  .description('Configure this machine to use a remote triangulator serve host.')
   .requiredOption('--connect <connection>', 'Connection string or path to bridge-connection.json.')
-  .option('--config <path>', 'Override the oracle config file location (default ~/.oracle/config.json).')
-  .option('--no-write-config', 'Do not write ~/.oracle/config.json (just validate).')
+  .option('--config <path>', 'Override the triangulator config file location (default ~/.triangulator/config.json).')
+  .option('--no-write-config', 'Do not write ~/.triangulator/config.json (just validate).')
   .option('--no-test', 'Skip remote /health check.')
   .option('--print-env', 'Print env var exports (includes token).', false)
   .action(async (commandOptions) => {
@@ -562,8 +564,8 @@ bridgeCommand
 
 bridgeCommand
   .command('codex-config')
-  .description('Print a Codex CLI MCP server config snippet for oracle-mcp.')
-  .option('--print-token', 'Include ORACLE_REMOTE_TOKEN in the snippet.', false)
+  .description('Print a Codex CLI MCP server config snippet for triangulator-mcp.')
+  .option('--print-token', 'Include TRIANGULATOR_REMOTE_TOKEN in the snippet.', false)
   .action(async (commandOptions) => {
     const { runBridgeCodexConfig } = await import('../src/cli/bridge/codexConfig.js');
     await runBridgeCodexConfig(commandOptions);
@@ -571,8 +573,8 @@ bridgeCommand
 
 bridgeCommand
   .command('claude-config')
-  .description('Print a Claude Code MCP config snippet (.mcp.json) for oracle-mcp.')
-  .option('--print-token', 'Include ORACLE_REMOTE_TOKEN in the snippet.', false)
+  .description('Print a Claude Code MCP config snippet (.mcp.json) for triangulator-mcp.')
+  .option('--print-token', 'Include TRIANGULATOR_REMOTE_TOKEN in the snippet.', false)
   .action(async (commandOptions) => {
     const { runBridgeClaudeConfig } = await import('../src/cli/bridge/claudeConfig.js');
     await runBridgeClaudeConfig(commandOptions);
@@ -632,7 +634,7 @@ const statusCommand = program
       return;
     }
     if (sessionId === 'clear' || sessionId === 'clean') {
-      console.error('Session cleanup now uses --clear. Run "oracle status --clear --hours <n>" instead.');
+      console.error('Session cleanup now uses --clear. Run "triangulator status --clear --hours <n>" instead.');
       process.exitCode = 1;
       return;
     }
@@ -764,7 +766,7 @@ function getBrowserConfigFromMetadata(metadata: SessionMetadata): BrowserSession
 }
 
 async function runRootCommand(options: CliOptions): Promise<void> {
-  if (process.env.ORACLE_FORCE_TUI === '1') {
+  if (process.env.TRIANGULATOR_FORCE_TUI === '1' || process.env.ORACLE_FORCE_TUI === '1') {
     await sessionStore.ensureStorage();
     await launchTui({ version: VERSION, printIntro: false });
     return;
@@ -817,7 +819,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     if (optionUsesDefault('retainHours') && typeof userConfig.sessionRetentionHours === 'number') {
       options.retainHours = userConfig.sessionRetentionHours;
     }
-    const envRetention = process.env.ORACLE_RETAIN_HOURS;
+    const envRetention = process.env.TRIANGULATOR_RETAIN_HOURS ?? process.env.ORACLE_RETAIN_HOURS;
     if (optionUsesDefault('retainHours') && envRetention) {
       const parsed = Number.parseFloat(envRetention);
       if (!Number.isNaN(parsed)) {
@@ -840,7 +842,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   }
 
   if (userCliArgs.length === 0) {
-    console.log(chalk.yellow('No prompt or subcommand supplied. Run `oracle --help` or `oracle tui` for the TUI.'));
+    console.log(chalk.yellow('No prompt or subcommand supplied. Run `triangulator --help` or `triangulator tui` for the TUI.'));
     program.outputHelp();
     return;
   }
@@ -1205,7 +1207,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     sessionId: sessionMeta.id,
     effectiveModelId,
   };
-  const disableDetachEnv = process.env.ORACLE_NO_DETACH === '1';
+  const disableDetachEnv = (process.env.TRIANGULATOR_NO_DETACH ?? process.env.ORACLE_NO_DETACH) === '1';
   const detachAllowed = remoteExecutionActive
     ? false
     : shouldDetachSession({
@@ -1228,7 +1230,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    console.log(chalk.blue(`Session running in background. Reattach via: oracle session ${sessionMeta.id}`));
+    console.log(chalk.blue(`Session running in background. Reattach via: triangulator session ${sessionMeta.id}`));
     console.log(
       chalk.dim('Pro runs can take up to 60 minutes (usually 10-15). Add --wait to stay attached.'),
     );
@@ -1250,7 +1252,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     return;
   }
   if (detached) {
-    console.log(chalk.blue(`Reattach via: oracle session ${sessionMeta.id}`));
+    console.log(chalk.blue(`Reattach via: triangulator session ${sessionMeta.id}`));
     await attachSession(sessionMeta.id, { suppressMetadata: true });
   }
 }
@@ -1269,10 +1271,10 @@ async function runInteractiveSession(
   const { logLine, writeChunk, stream } = sessionStore.createLogWriter(sessionMeta.id);
   let headerAugmented = false;
   const combinedLog = (message = ''): void => {
-    if (!headerAugmented && message.startsWith('oracle (')) {
+    if (!headerAugmented && message.startsWith('triangulator (')) {
       headerAugmented = true;
       if (showReattachHint) {
-        console.log(`${message}\n${chalk.blue(`Reattach via: oracle session ${sessionMeta.id}`)}`);
+        console.log(`${message}\n${chalk.blue(`Reattach via: triangulator session ${sessionMeta.id}`)}`);
       } else {
         console.log(message);
       }
@@ -1378,11 +1380,11 @@ function printDebugHelp(cliName: string): void {
   console.log('');
   console.log(chalk.bold('Browser Options'));
   printDebugOptionGroup([
-    ['--chatgpt-url <url>', 'Override the ChatGPT web URL (workspace/folder targets).'],
+    ['--perplexity-url <url>', 'Override the Perplexity Spaces URL (workspace targets).'],
     ['--browser-chrome-profile <name>', 'Reuse cookies from a specific Chrome profile.'],
     ['--browser-chrome-path <path>', 'Point to a custom Chrome/Chromium binary.'],
     ['--browser-cookie-path <path>', 'Use a specific Chrome/Chromium cookie store file.'],
-    ['--browser-url <url>', 'Alias for --chatgpt-url.'],
+    ['--browser-url <url>', 'Alias for --perplexity-url.'],
     ['--browser-timeout <ms|s|m>', 'Cap total wait time for the assistant response.'],
     ['--browser-input-timeout <ms|s|m>', 'Cap how long we wait for the composer textarea.'],
     ['--browser-cookie-wait <ms|s|m>', 'Wait before retrying cookie sync when Chrome cookies are empty or locked.'],

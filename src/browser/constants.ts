@@ -1,42 +1,40 @@
 import type { BrowserModelStrategy } from './types.js';
 
-export const CHATGPT_URL = 'https://chatgpt.com/';
+export const PERPLEXITY_URL = 'https://www.perplexity.ai/';
 export const DEFAULT_MODEL_TARGET = 'GPT-5.2 Pro';
 export const DEFAULT_MODEL_STRATEGY: BrowserModelStrategy = 'select';
-export const COOKIE_URLS = ['https://chatgpt.com', 'https://chat.openai.com', 'https://atlas.openai.com'];
+export const COOKIE_URLS = ['https://www.perplexity.ai', 'https://perplexity.ai'];
 
 export const INPUT_SELECTORS = [
-  'textarea[data-id="prompt-textarea"]',
-  'textarea[placeholder*="Send a message"]',
-  'textarea[aria-label="Message ChatGPT"]',
+  'textarea[placeholder*="Ask"]',
+  'textarea[placeholder*="ask"]',
+  'textarea[aria-label*="Ask"]',
+  'textarea[aria-label*="Question"]',
+  'textarea[data-testid*="input"]',
   'textarea:not([disabled])',
-  'textarea[name="prompt-textarea"]',
-  '#prompt-textarea',
-  '.ProseMirror',
-  '[contenteditable="true"][data-virtualkeyboard="true"]',
+  '[contenteditable="true"][role="textbox"]',
+  '[contenteditable="true"]',
 ];
 
 export const ANSWER_SELECTORS = [
-  'article[data-testid^="conversation-turn"][data-message-author-role="assistant"]',
-  'article[data-testid^="conversation-turn"][data-turn="assistant"]',
-  'article[data-testid^="conversation-turn"] [data-message-author-role="assistant"]',
-  'article[data-testid^="conversation-turn"] [data-turn="assistant"]',
-  'article[data-testid^="conversation-turn"] .markdown',
-  '[data-message-author-role="assistant"] .markdown',
-  '[data-turn="assistant"] .markdown',
-  '[data-message-author-role="assistant"]',
-  '[data-turn="assistant"]',
+  '[data-testid="answer"]',
+  '[data-testid="final-answer"]',
+  '[data-testid*="answer"]',
+  'main [data-testid*="answer"]',
+  'main .prose',
+  'main .markdown',
+  'article',
 ];
 
 export const CONVERSATION_TURN_SELECTOR =
-  'article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"], section[data-testid^="conversation-turn"], ' +
-  'article[data-message-author-role], div[data-message-author-role], section[data-message-author-role], ' +
-  'article[data-turn], div[data-turn], section[data-turn]';
-export const ASSISTANT_ROLE_SELECTOR = '[data-message-author-role="assistant"], [data-turn="assistant"]';
+  'article[data-testid*="answer"], div[data-testid*="answer"], section[data-testid*="answer"], ' +
+  'article[data-testid*="message"], div[data-testid*="message"], section[data-testid*="message"], ' +
+  'article, section';
+export const ASSISTANT_ROLE_SELECTOR = '[data-testid*="answer"], [data-testid*="response"], main .prose, main .markdown';
 export const CLOUDFLARE_SCRIPT_SELECTOR = 'script[src*="/challenge-platform/"]';
 export const CLOUDFLARE_TITLE = 'just a moment';
-export const PROMPT_PRIMARY_SELECTOR = '#prompt-textarea';
-export const PROMPT_FALLBACK_SELECTOR = 'textarea[name="prompt-textarea"]';
+export const PROMPT_PRIMARY_SELECTOR = '[contenteditable="true"]';
+export const PROMPT_FALLBACK_SELECTOR = 'textarea';
 export const FILE_INPUT_SELECTORS = [
   'form input[type="file"]:not([accept])',
   'input[type="file"][multiple]:not([accept])',
@@ -63,7 +61,7 @@ export const UPLOAD_STATUS_SELECTORS = [
   '[aria-live="assertive"]',
 ];
 
-export const STOP_BUTTON_SELECTOR = '[data-testid="stop-button"]';
+export const STOP_BUTTON_SELECTOR = 'button[aria-label*="Stop"], button[data-testid*="stop"]';
 export const SEND_BUTTON_SELECTORS = [
   'button[data-testid="send-button"]',
   'button[data-testid*="composer-send"]',
@@ -72,8 +70,8 @@ export const SEND_BUTTON_SELECTORS = [
   'button[aria-label*="Send"]',
 ];
 export const SEND_BUTTON_SELECTOR = SEND_BUTTON_SELECTORS[0];
-export const MODEL_BUTTON_SELECTOR = '[data-testid="model-switcher-dropdown-button"]';
-export const COPY_BUTTON_SELECTOR = 'button[data-testid="copy-turn-action-button"]';
+export const MODEL_BUTTON_SELECTOR = '[data-testid*="model"], [aria-label*="Model"]';
+export const COPY_BUTTON_SELECTOR = 'button[aria-label*="Copy"], button[data-testid*="copy"]';
 // Action buttons that only appear once a turn has finished rendering.
 export const FINISHED_ACTIONS_SELECTOR =
-  'button[data-testid="copy-turn-action-button"], button[data-testid="good-response-turn-action-button"], button[data-testid="bad-response-turn-action-button"], button[aria-label="Share"]';
+  'button[aria-label*="Copy"], button[aria-label*="Share"], button[data-testid*="copy"], button[data-testid*="share"]';

@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { resolveBrowserConfig } from '../../src/browser/config.js';
-import { CHATGPT_URL } from '../../src/browser/constants.js';
+import { PERPLEXITY_URL } from '../../src/browser/constants.js';
 
 describe('resolveBrowserConfig', () => {
   test('returns defaults when config missing', () => {
     const resolved = resolveBrowserConfig(undefined);
-    expect(resolved.url).toBe(CHATGPT_URL);
+    expect(resolved.url).toBe(PERPLEXITY_URL);
     const isWindows = process.platform === 'win32';
     expect(resolved.cookieSync).toBe(!isWindows);
     expect(resolved.headless).toBe(false);
@@ -35,12 +35,11 @@ describe('resolveBrowserConfig', () => {
     expect(resolved.debug).toBe(true);
   });
 
-  test('rejects temporary chat URLs when desiredModel is Pro', () => {
-    expect(() =>
-      resolveBrowserConfig({
-        url: 'https://chatgpt.com/?temporary-chat=true',
-        desiredModel: 'GPT-5.2 Pro',
-      }),
-    ).toThrow(/Temporary Chat/i);
+  test('normalizes trailing slashes for the configured URL', () => {
+    const resolved = resolveBrowserConfig({
+      url: 'https://www.perplexity.ai',
+      desiredModel: 'GPT-5.2 Pro',
+    });
+    expect(resolved.url).toBe('https://www.perplexity.ai/');
   });
 });

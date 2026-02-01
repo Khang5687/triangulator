@@ -2,11 +2,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CMD=(node "$ROOT/dist/bin/oracle-cli.js" --engine browser --wait --heartbeat 0 --timeout 900 --browser-input-timeout 120000)
+CMD=(node "$ROOT/dist/bin/triangulator-cli.js" --engine browser --wait --heartbeat 0 --timeout 900 --browser-input-timeout 120000)
 FAST_MODEL="gpt-5.2"
 PRO_MODEL="gpt-5.2-pro"
 
-tmpfile="$(mktemp -t oracle-browser-smoke)"
+tmpfile="$(mktemp -t triangulator-browser-smoke)"
 echo "smoke-attachment" >"$tmpfile"
 
 echo "[browser-smoke] fast upload attachment (non-inline)"
@@ -23,8 +23,8 @@ echo "[browser-smoke] pro standard markdown check"
 
 echo "[browser-smoke] reattach flow after controller loss"
 slug="browser-reattach-smoke"
-meta="$HOME/.oracle/sessions/$slug/meta.json"
-logfile="$(mktemp -t oracle-browser-reattach)"
+meta="$HOME/.triangulator/sessions/$slug/meta.json"
+logfile="$(mktemp -t triangulator-browser-reattach)"
 
 # Start a browser run in the background and wait for runtime hints to appear.
 "${CMD[@]}" --model "$PRO_MODEL" --prompt "Return exactly 'reattach-ok'." --slug "$slug" --browser-keep-browser --heartbeat 0 --timeout 900 --force >"$logfile" 2>&1 &
@@ -46,15 +46,15 @@ if [ "$runtime_ready" -ne 1 ]; then
   exit 1
 fi
 
-# Give ChatGPT time to finish after we have a runtime hint.
+# Give Perplexity time to finish after we have a runtime hint.
 sleep 30
 
 # Simulate controller loss.
 kill "$runner_pid" 2>/dev/null || true
 wait "$runner_pid" 2>/dev/null || true
 
-reattach_log="$(mktemp -t oracle-browser-reattach-log)"
-if ! node "$ROOT/dist/bin/oracle-cli.js" session "$slug" --render-plain >"$reattach_log" 2>&1; then
+reattach_log="$(mktemp -t triangulator-browser-reattach-log)"
+if ! node "$ROOT/dist/bin/triangulator-cli.js" session "$slug" --render-plain >"$reattach_log" 2>&1; then
   echo "[browser-smoke] reattach: session command failed"
   cat "$reattach_log"
   exit 1
@@ -71,6 +71,6 @@ chrome_pid=$(node -e "const fs=require('fs');try{const j=JSON.parse(fs.readFileS
 if [ -n "${chrome_pid:-}" ]; then
   kill "$chrome_pid" 2>/dev/null || true
 fi
-rm -rf "$HOME/.oracle/sessions/$slug" "$logfile" "$reattach_log"
+rm -rf "$HOME/.triangulator/sessions/$slug" "$logfile" "$reattach_log"
 
 rm -f "$tmpfile"

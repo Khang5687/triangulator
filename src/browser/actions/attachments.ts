@@ -293,7 +293,7 @@ export async function uploadAttachmentFile(
     };
   };
 
-  // New ChatGPT UI hides the real file input behind a composer "+" menu; click it pre-emptively.
+  // Some UIs hide the file input behind a composer "+" menu; click it pre-emptively.
   // Learned: synthetic `.click()` is sometimes ignored (isTrusted checks). Prefer a CDP mouse click when possible.
   const clickPlusTrusted = async (): Promise<boolean> => {
     if (!input || typeof input.dispatchMouseEvent !== 'function') return false;
@@ -595,7 +595,7 @@ export async function uploadAttachmentFile(
       }
 
       // Mark candidates with stable indices so we can select them via DOM.querySelector.
-      // Learned: ChatGPT sometimes renders a zero-sized file input that does *not* trigger uploads;
+      // Learned: some surfaces render a zero-sized file input that does *not* trigger uploads;
       // keep it as a fallback, but strongly prefer visible (even sr-only 1x1) inputs.
       const localSet = new Set(localInputs);
       let idx = 0;
@@ -610,13 +610,13 @@ export async function uploadAttachmentFile(
           (local ? 40 : 0) +
           (visible ? 30 : -200) +
           (!imageOnly ? 30 : isImageAttachment ? 20 : 5);
-        el.setAttribute('data-oracle-upload-candidate', 'true');
-        el.setAttribute('data-oracle-upload-idx', String(idx));
+        el.setAttribute('data-triangulator-upload-candidate', 'true');
+        el.setAttribute('data-triangulator-upload-idx', String(idx));
         return { idx: idx++, score, imageOnly };
       });
 
       // When the attachment isn't an image, avoid inputs that only accept images.
-      // Some ChatGPT surfaces expose multiple file inputs (e.g. image-only vs generic upload).
+      // Some surfaces expose multiple file inputs (e.g. image-only vs generic upload).
       if (!isImageAttachment) {
         const nonImage = candidates.filter((candidate) => !candidate.imageOnly);
         if (nonImage.length > 0) {
@@ -666,7 +666,7 @@ export async function uploadAttachmentFile(
   const baselineChipSignature = serializeChips(baselineChips);
   if (!candidateValue?.ok || candidateOrder.length === 0) {
     await logDomFailure(runtime, logger, 'file-input-missing');
-    throw new Error('Unable to locate ChatGPT file attachment input.');
+    throw new Error('Unable to locate Perplexity file attachment input.');
   }
 
   const hasChipDelta = (signals: {
@@ -726,7 +726,7 @@ export async function uploadAttachmentFile(
   };
 
   const inputSnapshotFor = (idx: number) => `(() => {
-    const input = document.querySelector('input[type="file"][data-oracle-upload-idx="${idx}"]');
+    const input = document.querySelector('input[type="file"][data-triangulator-upload-idx="${idx}"]');
     if (!(input instanceof HTMLInputElement)) {
       return { names: [], value: '', count: 0 };
     }
@@ -862,7 +862,7 @@ export async function uploadAttachmentFile(
         return /\\buploading\\b/.test(text) || /\\bprocessing\\b/.test(text);
       });
     });
-    const input = document.querySelector('input[type="file"][data-oracle-upload-idx="${idx}"]');
+    const input = document.querySelector('input[type="file"][data-triangulator-upload-idx="${idx}"]');
     const inputNames =
       input instanceof HTMLInputElement
         ? Array.from(input.files || []).map((f) => f?.name ?? '').filter(Boolean)
@@ -917,7 +917,7 @@ export async function uploadAttachmentFile(
       }
       const resultNode = await dom.querySelector({
         nodeId: documentNode.root.nodeId,
-        selector: `input[type="file"][data-oracle-upload-idx="${idx}"]`,
+        selector: `input[type="file"][data-triangulator-upload-idx="${idx}"]`,
       });
       if (!resultNode?.nodeId) {
         continue;
@@ -1008,7 +1008,7 @@ export async function uploadAttachmentFile(
           if (mode === 'set') {
             await dom.setFileInputFiles({ nodeId: resultNode.nodeId, files: [attachment.path] });
           } else {
-            const selector = `input[type="file"][data-oracle-upload-idx="${idx}"]`;
+            const selector = `input[type="file"][data-triangulator-upload-idx="${idx}"]`;
             try {
               await transferAttachmentViaDataTransfer(runtime, attachment, selector);
             } catch (error) {
@@ -1039,7 +1039,7 @@ export async function uploadAttachmentFile(
         await runtime
           .evaluate({
             expression: `(() => {
-              const input = document.querySelector('input[type="file"][data-oracle-upload-idx="${idx}"]');
+              const input = document.querySelector('input[type="file"][data-triangulator-upload-idx="${idx}"]');
               if (!(input instanceof HTMLInputElement)) return false;
               try {
                 input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1077,7 +1077,7 @@ export async function uploadAttachmentFile(
           inputConfirmed = true;
           break;
         }
-        logger('Attachment input set; retrying with data transfer to trigger ChatGPT upload.');
+        logger('Attachment input set; retrying with data transfer to trigger Perplexity upload.');
         await dom.setFileInputFiles({ nodeId: resultNode.nodeId, files: [] }).catch(() => undefined);
         await delay(150);
         result = await runInputAttempt('transfer');
@@ -1152,7 +1152,7 @@ export async function uploadAttachmentFile(
   }
 
   await logDomFailure(runtime, logger, 'file-upload-missing');
-  throw new Error('Attachment did not register with the ChatGPT composer in time.');
+  throw new Error('Attachment did not register with the Perplexity composer in time.');
 }
 
 export async function clearComposerAttachments(
@@ -1591,7 +1591,7 @@ export async function waitForAttachmentCompletion(
       }
 
       // Fallback: if the file input has the expected names, allow progress once that condition is stable.
-      // Some ChatGPT surfaces only render the filename after sending the message.
+      // Some surfaces only render the filename after sending the message.
       const inputMissing = expectedNormalized.filter((expected) => {
         const baseName = expected.split('/').pop()?.split('\\').pop() ?? expected;
         const normalizedExpected = baseName.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -1620,7 +1620,7 @@ export async function waitForAttachmentCompletion(
     }
     await delay(250);
   }
-  logger?.('Attachment upload timed out while waiting for ChatGPT composer to become ready.');
+  logger?.('Attachment upload timed out while waiting for Perplexity composer to become ready.');
   await logDomFailure(Runtime, logger ?? (() => {}), 'file-upload-timeout');
   throw new Error('Attachments did not finish uploading before timeout.');
 }
@@ -1940,7 +1940,7 @@ export async function waitForAttachmentVisible(
   }
   logger?.('Attachment not visible in composer; giving up.');
   await logDomFailure(Runtime, logger ?? (() => {}), 'attachment-visible');
-  throw new Error('Attachment did not appear in ChatGPT composer.');
+  throw new Error('Attachment did not appear in Perplexity composer.');
 }
 
 async function waitForAttachmentAnchored(

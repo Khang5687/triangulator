@@ -19,7 +19,9 @@ describe('runDryRunSummary', () => {
       { readFilesImpl },
     );
 
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('[dry-run] Oracle (0.4.1) would call gpt-5.2-pro'));
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('[dry-run] Triangulator (0.4.1) would call gpt-5.2-pro'),
+    );
     expect(log).toHaveBeenCalledWith(expect.stringContaining('No files matched'));
   });
 
@@ -46,7 +48,7 @@ describe('runDryRunSummary', () => {
         version: '0.4.1',
         log,
         browserConfig: {
-          inlineCookies: [{ name: 'a', value: 'b', domain: 'chatgpt.com' }],
+          inlineCookies: [{ name: 'a', value: 'b', domain: 'perplexity.ai' }],
           inlineCookiesSource: 'test',
           cookieNames: [],
         },

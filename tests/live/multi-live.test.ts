@@ -8,7 +8,7 @@ import { runMultiModelApiSession } from '../../src/oracle/multiModelRunner.js';
 import { sessionStore } from '../../src/sessionStore.js';
 import type { ModelName } from '../../src/oracle.js';
 
-const live = process.env.ORACLE_LIVE_TEST === '1';
+const live = process.env.TRIANGULATOR_LIVE_TEST === '1' || process.env.ORACLE_LIVE_TEST === '1';
 const baseUrl = process.env.OPENAI_BASE_URL ?? '';
 const isOpenRouterBase = baseUrl.includes('openrouter');
 const hasKeys =
@@ -31,7 +31,7 @@ const isAccessOrAuthError = (reason: unknown): boolean => {
 const isHtmlError = (reason: unknown): boolean => /<!doctype|<html/i.test(String(reason ?? ''));
 const execFileAsync = promisify(execFile);
 const TSX_BIN = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
-const CLI_ENTRY = path.join(process.cwd(), 'bin', 'oracle-cli.ts');
+const CLI_ENTRY = path.join(process.cwd(), 'bin', 'triangulator-cli.ts');
 
 (live && !isOpenRouterBase ? describe : describe.skip)('Multi-model live smoke (GPT + Gemini + Claude)', () => {
   const originalBaseUrl = process.env.OPENAI_BASE_URL;
@@ -118,13 +118,13 @@ const CLI_ENTRY = path.join(process.cwd(), 'bin', 'oracle-cli.ts');
   it(
     'accepts shorthand models end-to-end via CLI',
     async () => {
-      const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'oracle-live-multi-shorthand-'));
+      const oracleHome = await mkdtemp(path.join(os.tmpdir(), 'triangulator-live-multi-shorthand-'));
       const env = {
         ...process.env,
         // biome-ignore lint/style/useNamingConvention: env var name
-        ORACLE_HOME_DIR: oracleHome,
+        TRIANGULATOR_HOME_DIR: oracleHome,
         // biome-ignore lint/style/useNamingConvention: env var name
-        ORACLE_NO_DETACH: '1',
+        TRIANGULATOR_NO_DETACH: '1',
       };
 
       try {

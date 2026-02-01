@@ -33,7 +33,7 @@ describe('registerTerminationHooks', () => {
       port: 9222,
     };
     const logger = vi.fn();
-    const userDataDir = '/tmp/oracle-manual-login-profile';
+    const userDataDir = '/tmp/triangulator-manual-login-profile';
 
     const removeHooks = registerTerminationHooks(
       chrome as unknown as import('chrome-launcher').LaunchedChrome,

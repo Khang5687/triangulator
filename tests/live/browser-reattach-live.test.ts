@@ -6,29 +6,25 @@ import type { BrowserLogger } from '../../src/browser/types.js';
 import { getCookies } from '@steipete/sweet-cookie';
 import { acquireLiveTestLock, releaseLiveTestLock } from './liveLock.js';
 
-const LIVE = process.env.ORACLE_LIVE_TEST === '1';
-const DEFAULT_PROJECT_URLS = [
-  'https://chatgpt.com/g/g-p-69505ed97e3081918a275477a647a682/project',
-  'https://chatgpt.com/g/g-p-691edc9fec088191b553a35093da1ea8-oracle/project',
-];
-const PROJECT_URLS = process.env.ORACLE_CHATGPT_PROJECT_URL
-  ? [process.env.ORACLE_CHATGPT_PROJECT_URL]
-  : DEFAULT_PROJECT_URLS;
+const LIVE = process.env.TRIANGULATOR_LIVE_TEST === '1' || process.env.ORACLE_LIVE_TEST === '1';
+const DEFAULT_SPACE_URLS = ['https://www.perplexity.ai/spaces/new-space-0U6ZuYXTRQCTHPmLdhgWhQ'];
+const SPACE_URLS = process.env.TRIANGULATOR_PERPLEXITY_SPACE_URL
+  ? [process.env.TRIANGULATOR_PERPLEXITY_SPACE_URL]
+  : DEFAULT_SPACE_URLS;
 
-async function hasChatGptCookies(): Promise<boolean> {
+async function hasPerplexityCookies(): Promise<boolean> {
   const { cookies } = await getCookies({
-    url: 'https://chatgpt.com',
-    origins: ['https://chatgpt.com', 'https://chat.openai.com', 'https://atlas.openai.com'],
+    url: 'https://www.perplexity.ai',
+    origins: ['https://www.perplexity.ai'],
     browsers: ['chrome'],
     mode: 'merge',
     chromeProfile: 'Default',
     timeoutMs: 5_000,
   });
-  // Learned: reuse the same session cookie check as other live browser tests.
-  const hasSession = cookies.some((cookie) => cookie.name.startsWith('__Secure-next-auth.session-token'));
+  const hasSession = cookies.length > 0;
   if (!hasSession) {
     console.warn(
-      'Skipping ChatGPT browser live tests (missing __Secure-next-auth.session-token). Open chatgpt.com in Chrome and retry.',
+      'Skipping Perplexity browser live tests (missing cookies). Open perplexity.ai in Chrome and retry.',
     );
     return false;
   }
@@ -39,16 +35,16 @@ function createLogger(): BrowserLogger {
   return (() => {}) as BrowserLogger;
 }
 
-(LIVE ? describe : describe.skip)('ChatGPT browser live reattach', () => {
+(LIVE ? describe : describe.skip)('Perplexity browser live reattach', () => {
   test(
     'reattaches from project list after closing Chrome (pro request)',
     async () => {
-      if (!(await hasChatGptCookies())) return;
+      if (!(await hasPerplexityCookies())) return;
       // Learned: reattach needs exclusive access to the profile to avoid target mismatch.
-      await acquireLiveTestLock('chatgpt-browser');
+      await acquireLiveTestLock('perplexity-browser');
       try {
-        if (!PROJECT_URLS.some((url) => url.includes('/g/'))) {
-          console.warn('Skipping live reattach test (project URL missing).');
+        if (!SPACE_URLS.some((url) => url.includes('/spaces/'))) {
+          console.warn('Skipping live reattach test (space URL missing).');
           return;
         }
 
@@ -70,7 +66,7 @@ function createLogger(): BrowserLogger {
         let result: Awaited<ReturnType<typeof runBrowserMode>> | null = null;
         let lastErrorMessage = '';
         let selectedProjectUrl: string | undefined;
-        for (const projectUrl of PROJECT_URLS) {
+        for (const projectUrl of SPACE_URLS) {
           for (let attempt = 1; attempt <= 3; attempt += 1) {
             try {
               // Learned: keepBrowser keeps the chrome instance alive so we can explicitly kill it and reattach.
@@ -95,11 +91,11 @@ function createLogger(): BrowserLogger {
                 return;
               }
               const missingProject =
-                message.includes('Unable to locate prior ChatGPT conversation in sidebar') ||
-                message.includes('project URL missing');
+                message.includes('Unable to locate prior Perplexity Space in sidebar') ||
+                message.includes('space URL missing');
               const transient =
                 message.includes('Prompt did not appear in conversation before timeout') ||
-                message.includes('Chrome window closed before oracle finished') ||
+                message.includes('Chrome window closed before triangulator finished') ||
                 message.includes('Reattach target did not respond');
               if (missingProject) {
                 console.warn(`Project URL unavailable (${projectUrl}); trying fallback.`);
@@ -127,7 +123,7 @@ function createLogger(): BrowserLogger {
         expect(result.answerText.toLowerCase()).toContain(promptToken.toLowerCase());
         const tabUrl = result.tabUrl ?? selectedProjectUrl;
         const conversationId = (() => {
-          const marker = '/c/';
+          const marker = '/spaces/';
           const idx = tabUrl.indexOf(marker);
           if (idx === -1) return undefined;
           const rest = tabUrl.slice(idx + marker.length);
@@ -172,7 +168,7 @@ function createLogger(): BrowserLogger {
           await fs.rm(runtime.userDataDir, { recursive: true, force: true });
         }
       } finally {
-        await releaseLiveTestLock('chatgpt-browser');
+        await releaseLiveTestLock('perplexity-browser');
       }
     },
     15 * 60 * 1000,

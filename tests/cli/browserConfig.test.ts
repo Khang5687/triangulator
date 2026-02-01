@@ -90,7 +90,7 @@ describe('buildBrowserConfig', () => {
   test('trims whitespace around override labels', async () => {
     const config = await buildBrowserConfig({
       model: 'gpt-5.1',
-      browserModelLabel: '  ChatGPT 5.1 Instant  ',
+      browserModelLabel: '  Perplexity 5.1 Instant  ',
     });
     expect(config.desiredModel).toBe('GPT-5.2');
   });
@@ -103,49 +103,21 @@ describe('buildBrowserConfig', () => {
     expect(config.remoteChrome).toEqual({ host: 'remote-host', port: 9_333 });
   });
 
-  test('normalizes chatgpt-url alias and adds https when missing', async () => {
+  test('normalizes legacy url alias and adds https when missing', async () => {
     const config = await buildBrowserConfig({
       model: 'gpt-5.1',
-      chatgptUrl: 'chatgpt.example.com/workspace',
+      chatgptUrl: 'perplexity.example.com/workspace',
     });
-    expect(config.url).toBe('https://chatgpt.example.com/workspace');
+    expect(config.url).toBe('https://perplexity.example.com/workspace');
   });
 
-  test('rejects invalid chatgpt URL protocols', async () => {
+  test('rejects invalid legacy URL protocols', async () => {
     await expect(
       buildBrowserConfig({
         model: 'gpt-5.1',
-        chatgptUrl: 'ftp://chatgpt.example.com',
+        chatgptUrl: 'ftp://perplexity.example.com',
       }),
     ).rejects.toThrow(/http/i);
-  });
-
-  test('rejects temporary chat URLs when targeting Pro', async () => {
-    await expect(
-      buildBrowserConfig({
-        model: 'gpt-5.2-pro',
-        chatgptUrl: 'https://chatgpt.com/?temporary-chat=true',
-      }),
-    ).rejects.toThrow(/Temporary Chat/i);
-  });
-
-  test('allows temporary chat URLs when model strategy keeps current selection', async () => {
-    const config = await buildBrowserConfig({
-      model: 'gpt-5.2-pro',
-      chatgptUrl: 'https://chatgpt.com/?temporary-chat=true',
-      browserModelStrategy: 'current',
-    });
-    expect(config.url).toBe('https://chatgpt.com/?temporary-chat=true');
-    expect(config.modelStrategy).toBe('current');
-  });
-
-  test('allows temporary chat URLs when not targeting Pro', async () => {
-    const config = await buildBrowserConfig({
-      model: 'gpt-5.2',
-      chatgptUrl: 'https://chatgpt.com/?temporary-chat=true',
-    });
-    expect(config.url).toBe('https://chatgpt.com/?temporary-chat=true');
-    expect(config.desiredModel).toBe('GPT-5.2');
   });
 
   test('accepts IPv6 remoteChrome targets wrapped in brackets', async () => {
@@ -185,7 +157,7 @@ describe('buildBrowserConfig', () => {
 });
 
 describe('resolveBrowserModelLabel', () => {
-  test('returns canonical ChatGPT label when CLI value matches API model', () => {
+  test('returns canonical label when CLI value matches API model', () => {
     expect(resolveBrowserModelLabel('gpt-5.2-pro', 'gpt-5.2-pro')).toBe('GPT-5.2 Pro');
     expect(resolveBrowserModelLabel('GPT-5.1', 'gpt-5.1')).toBe('GPT-5.2');
   });
@@ -195,7 +167,7 @@ describe('resolveBrowserModelLabel', () => {
   });
 
   test('preserves descriptive labels to target alternate picker entries', () => {
-    expect(resolveBrowserModelLabel('ChatGPT 5.1 Instant', 'gpt-5.1')).toBe('ChatGPT 5.1 Instant');
+    expect(resolveBrowserModelLabel('Perplexity 5.1 Instant', 'gpt-5.1')).toBe('Perplexity 5.1 Instant');
   });
 
   test('supports undefined or whitespace-only input', () => {
@@ -204,6 +176,6 @@ describe('resolveBrowserModelLabel', () => {
   });
 
   test('trims descriptive labels before returning them', () => {
-    expect(resolveBrowserModelLabel('  ChatGPT 5.1 Thinking ', 'gpt-5.1')).toBe('ChatGPT 5.1 Thinking');
+    expect(resolveBrowserModelLabel('  Perplexity 5.1 Thinking ', 'gpt-5.1')).toBe('Perplexity 5.1 Thinking');
   });
 });

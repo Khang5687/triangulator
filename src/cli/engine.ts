@@ -16,7 +16,7 @@ export function defaultWaitPreference(model: string, engine: EngineMode): boolea
  * Precedence:
  * 1) Legacy --browser flag forces browser.
  * 2) Explicit --engine value.
- * 3) ORACLE_ENGINE environment override (api|browser).
+ * 3) TRIANGULATOR_ENGINE environment override (api|browser).
  * 4) OPENAI_API_KEY decides: api when set, otherwise browser.
  */
 export function resolveEngine(
@@ -32,7 +32,7 @@ export function resolveEngine(
   if (engine) {
     return engine;
   }
-  const envEngine = normalizeEngineMode(env.ORACLE_ENGINE);
+  const envEngine = normalizeEngineMode(env.TRIANGULATOR_ENGINE ?? env.ORACLE_ENGINE);
   if (envEngine) {
     return envEngine;
   }

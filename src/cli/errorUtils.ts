@@ -1,4 +1,4 @@
-const LOGGED_SYMBOL = Symbol('oracle.alreadyLogged');
+const LOGGED_SYMBOL = Symbol('triangulator.alreadyLogged');
 
 export function markErrorLogged(error: unknown): void {
   if (error instanceof Error) {

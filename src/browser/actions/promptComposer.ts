@@ -80,7 +80,7 @@ export async function submitPrompt(
 
   await input.insertText({ text: prompt });
 
-  // Some pages (notably ChatGPT when subscriptions/widgets load) need a brief settle
+  // Some pages need a brief settle before the send button becomes enabled.
   // before the send button becomes enabled; give it a short breather to avoid races.
   await delay(500);
 
@@ -332,13 +332,13 @@ async function verifyPromptCommitted(
     typeof baselineTurns === 'number' && Number.isFinite(baselineTurns) && baselineTurns >= 0
       ? Math.floor(baselineTurns)
       : -1;
-  // Learned: ChatGPT can echo/format text; normalize markdown and use prefix matches to detect the sent prompt.
+  // Learned: the UI can echo/format text; normalize markdown and use prefix matches to detect the sent prompt.
   const script = `(() => {
 	    const editor = document.querySelector(${primarySelectorLiteral});
 	    const fallback = document.querySelector(${fallbackSelectorLiteral});
 	    const normalize = (value) => {
 	      let text = value?.toLowerCase?.() ?? '';
-	      // Strip markdown *markers* but keep content (ChatGPT renders fence markers differently).
+	      // Strip markdown markers but keep content (fences can render differently).
 	      text = text.replace(/\`\`\`[^\\n]*\\n([\\s\\S]*?)\`\`\`/g, ' $1 ');
 	      text = text.replace(/\`\`\`/g, ' ');
 	      text = text.replace(/\`([^\`]*)\`/g, '$1');

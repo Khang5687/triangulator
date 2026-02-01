@@ -1,9 +1,10 @@
-import { normalizeChatgptUrl, CHATGPT_URL } from '../browserMode.js';
+import { normalizePerplexityUrl, PERPLEXITY_URL } from '../browserMode.js';
 import type { UserConfig } from '../config.js';
 import type { ThinkingTimeLevel } from '../oracle.js';
 import type { BrowserModelStrategy } from '../browser/types.js';
 
 export interface BrowserDefaultsOptions {
+  perplexityUrl?: string;
   chatgptUrl?: string;
   browserUrl?: string;
   browserChromeProfile?: string;
@@ -37,10 +38,11 @@ export function applyBrowserDefaultsFromConfig(
     return source === undefined || source === 'default';
   };
 
-  const configuredChatgptUrl = browser.chatgptUrl ?? browser.url;
-  const cliChatgptSet = options.chatgptUrl !== undefined || options.browserUrl !== undefined;
-  if (isUnset('chatgptUrl') && !cliChatgptSet && configuredChatgptUrl !== undefined) {
-    options.chatgptUrl = normalizeChatgptUrl(configuredChatgptUrl ?? '', CHATGPT_URL);
+  const configuredPerplexityUrl = browser.perplexityUrl ?? browser.chatgptUrl ?? browser.url;
+  const cliUrlSet =
+    options.perplexityUrl !== undefined || options.chatgptUrl !== undefined || options.browserUrl !== undefined;
+  if (isUnset('perplexityUrl') && !cliUrlSet && configuredPerplexityUrl !== undefined) {
+    options.perplexityUrl = normalizePerplexityUrl(configuredPerplexityUrl ?? '', PERPLEXITY_URL);
   }
 
   if (isUnset('browserChromeProfile') && browser.chromeProfile !== undefined) {

@@ -11,7 +11,7 @@ import { runBrowserMode } from '../browserMode.js';
 import type { BrowserRunResult } from '../browserMode.js';
 import type { RemoteRunPayload, RemoteRunEvent } from './types.js';
 import { getCookies, type Cookie } from '@steipete/sweet-cookie';
-import { CHATGPT_URL } from '../browser/constants.js';
+import { PERPLEXITY_URL } from '../browser/constants.js';
 import { getCliVersion } from '../version.js';
 import {
   cleanupStaleProfileState,
@@ -20,7 +20,7 @@ import {
   writeChromePid,
   writeDevToolsActivePort,
 } from '../browser/profileState.js';
-import { normalizeChatgptUrl } from '../browser/utils.js';
+import { normalizePerplexityUrl } from '../browser/utils.js';
 
 export interface RemoteServerOptions {
   host?: string;
@@ -66,7 +66,10 @@ export async function createRemoteServer(
   const logger = options.logger ?? console.log;
   const authToken = options.token ?? randomBytes(16).toString('hex');
   const startedAt = Date.now();
-  const verbose = process.argv.includes('--verbose') || process.env.ORACLE_SERVE_VERBOSE === '1';
+  const verbose =
+    process.argv.includes('--verbose') ||
+    process.env.TRIANGULATOR_SERVE_VERBOSE === '1' ||
+    (process.env.TRIANGULATOR_SERVE_VERBOSE ?? process.env.ORACLE_SERVE_VERBOSE) === '1';
   const color = process.stdout.isTTY
     ? (formatter: (msg: string) => string, msg: string) => formatter(msg)
     : (_formatter: (msg: string) => string, msg: string) => msg;
@@ -137,7 +140,7 @@ export async function createRemoteServer(
       const body = await readRequestBody(req);
       payload = JSON.parse(body) as RemoteRunPayload;
       if (payload?.browserConfig) {
-        payload.browserConfig.url = normalizeChatgptUrl(payload.browserConfig.url, CHATGPT_URL);
+        payload.browserConfig.url = normalizePerplexityUrl(payload.browserConfig.url, PERPLEXITY_URL);
       }
     } catch (_error) {
       busy = false;
@@ -151,7 +154,7 @@ export async function createRemoteServer(
     const runId = randomUUID();
     logger(`[serve] Accepted run ${runId} from ${formatSocket(req)} (prompt ${payload?.prompt?.length ?? 0} chars)`);
     // Each run gets an isolated temp dir so attachments/logs don't collide.
-    const runDir = await mkdtemp(path.join(os.tmpdir(), `oracle-serve-${runId}-`));
+    const runDir = await mkdtemp(path.join(os.tmpdir(), `triangulator-serve-${runId}-`));
     const attachmentDir = path.join(runDir, 'attachments');
     await mkdir(attachmentDir, { recursive: true });
 
@@ -242,7 +245,7 @@ export async function createRemoteServer(
   const also = extras.length ? `, also [${extras.join(', ')}]` : '';
   logger(color(chalk.cyanBright.bold, `Listening at ${primary}${also}`));
   logger(color(chalk.yellowBright, `Access token: ${authToken}`));
-  logger('Leave this terminal running; press Ctrl+C to stop oracle serve.');
+  logger('Leave this terminal running; press Ctrl+C to stop triangulator serve.');
 
   return {
     port: address.port,
@@ -256,27 +259,32 @@ export async function createRemoteServer(
 }
 
 export async function serveRemote(options: RemoteServerOptions = {}): Promise<void> {
-  const manualProfileDir = options.manualLoginProfileDir ?? path.join(os.homedir(), '.oracle', 'browser-profile');
+  const manualProfileDir =
+    options.manualLoginProfileDir ?? path.join(os.homedir(), '.triangulator', 'browser-profile');
   const preferManualLogin = options.manualLoginDefault || process.platform === 'win32' || isWsl();
   let cookies: CookieParam[] | null = null;
   let opened = false;
 
-  if (isWsl() && process.env.ORACLE_ALLOW_WSL_SERVE !== '1') {
-    console.log('WSL detected. For reliable browser automation, run `oracle serve` from Windows PowerShell/Command Prompt so we can use your Windows Chrome profile.');
-    console.log('If you want to stay in WSL anyway, set ORACLE_ALLOW_WSL_SERVE=1 and ensure a Linux Chrome is installed, then rerun.');
+  if (
+    isWsl() &&
+    process.env.TRIANGULATOR_ALLOW_WSL_SERVE !== '1' &&
+    (process.env.TRIANGULATOR_ALLOW_WSL_SERVE ?? process.env.ORACLE_ALLOW_WSL_SERVE) !== '1'
+  ) {
+    console.log('WSL detected. For reliable browser automation, run `triangulator serve` from Windows PowerShell/Command Prompt so we can use your Windows Chrome profile.');
+    console.log('If you want to stay in WSL anyway, set TRIANGULATOR_ALLOW_WSL_SERVE=1 and ensure a Linux Chrome is installed, then rerun.');
     console.log('Alternatively, start Windows Chrome with --remote-debugging-port=9222 and use `--remote-chrome <windows-ip>:9222`.');
     return;
   }
 
   if (!preferManualLogin) {
-    // Warm-up: ensure this host has a ChatGPT login before accepting runs.
-    const result = await loadLocalChatgptCookies(console.log, CHATGPT_URL);
+    // Warm-up: ensure this host has a Perplexity login before accepting runs.
+    const result = await loadLocalPerplexityCookies(console.log, PERPLEXITY_URL);
     cookies = result.cookies;
     opened = result.opened;
   }
 
   if (!cookies || cookies.length === 0) {
-    console.log('No ChatGPT cookies detected on this host.');
+    console.log('No Perplexity cookies detected on this host.');
     if (preferManualLogin) {
       await mkdir(manualProfileDir, { recursive: true });
       console.log(
@@ -292,21 +300,21 @@ export async function serveRemote(options: RemoteServerOptions = {}): Promise<vo
             `Found stale DevToolsActivePort (port ${existingPort}, ${reachable.error}); launching a fresh manual-login Chrome.`,
           );
           await cleanupStaleProfileState(manualProfileDir, console.log, { lockRemovalMode: 'never' });
-          void launchManualLoginChrome(manualProfileDir, CHATGPT_URL, console.log);
+          void launchManualLoginChrome(manualProfileDir, PERPLEXITY_URL, console.log);
         }
       } else {
-        void launchManualLoginChrome(manualProfileDir, CHATGPT_URL, console.log);
+        void launchManualLoginChrome(manualProfileDir, PERPLEXITY_URL, console.log);
       }
     } else if (opened) {
-      console.log('Opened chatgpt.com for login. Sign in, then restart `oracle serve` to continue.');
+      console.log('Opened perplexity.ai for login. Sign in, then restart `triangulator serve` to continue.');
       return;
     } else {
-      console.log('Please open https://chatgpt.com/ in this host\'s browser and sign in; then rerun.');
+      console.log('Please open https://www.perplexity.ai/ in this host\'s browser and sign in; then rerun.');
       console.log('Tip: install xdg-utils (xdg-open) to enable automatic browser opening on Linux/WSL.');
       return;
     }
   } else {
-    console.log(`Detected ${cookies.length} ChatGPT cookies on this host; runs will reuse this session.`);
+    console.log(`Detected ${cookies.length} Perplexity cookies on this host; runs will reuse this session.`);
   }
 
   const server = await createRemoteServer({
@@ -397,9 +405,12 @@ function formatReachableAddresses(bindAddress: string, port: number): string[] {
   return Array.from(new Set([...ipv4, ...ipv6]));
 }
 
-async function loadLocalChatgptCookies(logger: (message: string) => void, targetUrl: string): Promise<{ cookies: CookieParam[] | null; opened: boolean }> {
+async function loadLocalPerplexityCookies(
+  logger: (message: string) => void,
+  targetUrl: string,
+): Promise<{ cookies: CookieParam[] | null; opened: boolean }> {
   try {
-    logger('Loading ChatGPT cookies from this host\'s Chrome profile...');
+    logger('Loading Perplexity cookies from this host\'s Chrome profile...');
     const { cookies: rawCookies, warnings } = await getCookies({
       url: targetUrl,
       browsers: ['chrome'],
@@ -412,11 +423,11 @@ async function loadLocalChatgptCookies(logger: (message: string) => void, target
     }
     const cookies = rawCookies.map(toCdpCookie).filter((c): c is CookieParam => Boolean(c));
     if (!cookies || cookies.length === 0) {
-      logger('No local ChatGPT cookies found on this host. Please log in once; opening ChatGPT...');
+      logger('No local Perplexity cookies found on this host. Please log in once; opening Perplexity...');
       const opened = triggerLocalLoginPrompt(logger, targetUrl);
       return { cookies: null, opened };
     }
-    logger(`Loaded ${cookies.length} local ChatGPT cookies on this host.`);
+    logger(`Loaded ${cookies.length} local Perplexity cookies on this host.`);
     return { cookies, opened: false };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -425,7 +436,7 @@ async function loadLocalChatgptCookies(logger: (message: string) => void, target
       const lookedPath = missingDbMatch[1];
       logger(`Chrome cookies not found at ${lookedPath}. Set --browser-cookie-path to your Chrome profile or log in manually.`);
     } else {
-      logger(`Unable to load local ChatGPT cookies on this host: ${message}`);
+      logger(`Unable to load local Perplexity cookies on this host: ${message}`);
     }
     if (process.platform === 'linux' && isWsl()) {
       logger(
@@ -455,7 +466,10 @@ function toCdpCookie(cookie: Cookie): CookieParam | null {
 }
 
 function triggerLocalLoginPrompt(logger: (message: string) => void, url: string): boolean {
-  const verbose = process.argv.includes('--verbose') || process.env.ORACLE_SERVE_VERBOSE === '1';
+  const verbose =
+    process.argv.includes('--verbose') ||
+    process.env.TRIANGULATOR_SERVE_VERBOSE === '1' ||
+    (process.env.TRIANGULATOR_SERVE_VERBOSE ?? process.env.ORACLE_SERVE_VERBOSE) === '1';
   const openers: Array<{ cmd: string; args?: string[] }> = [];
 
   if (process.platform === 'darwin') {

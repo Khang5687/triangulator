@@ -1,7 +1,7 @@
 # Anthropic (Claude) Integration Plan
 
 Status: **shipped** (November 20, 2025)  
-Scope: API support for Claude 4.5 Sonnet and Claude 4.1 Opus in Oracle CLI.
+Scope: API support for Claude 4.5 Sonnet and Claude 4.1 Opus in Triangulator CLI.
 
 ## Models & Pricing (public list prices)
 - **claude-sonnet-4-5** (CLI alias: `claude-4.5-sonnet`) — 200k context, ~$3 / 1M input tokens, ~$15 / 1M output tokens.
@@ -11,7 +11,7 @@ Scope: API support for Claude 4.5 Sonnet and Claude 4.1 Opus in Oracle CLI.
 ## Requirements
 - Environment: `ANTHROPIC_API_KEY` (required), `ANTHROPIC_BASE_URL` (optional; defaults to `https://api.anthropic.com`).
 - Engine: **API only**. Browser mode is blocked for Claude.
-- Tokenizer: `@anthropic-ai/tokenizer` (wrapped to accept Oracle’s array inputs). Estimates are approximate; rely on API `usage` for actual billing.
+- Tokenizer: `@anthropic-ai/tokenizer` (wrapped to accept Triangulator’s array inputs). Estimates are approximate; rely on API `usage` for actual billing.
 
 ## Planned CLI Behavior
 - Add models to `--model/--models`: `claude-4.5-sonnet`, `claude-4.1-opus`. Aliases: “sonnet”, “opus” map to those IDs.
@@ -23,15 +23,15 @@ Scope: API support for Claude 4.5 Sonnet and Claude 4.1 Opus in Oracle CLI.
 ## Usage Examples
 - Single model (Sonnet):  
   ```bash
-  oracle --engine api --model claude-4.5-sonnet --prompt "Summarize the design doc" --file docs/design.md
+  triangulator --engine api --model claude-4.5-sonnet --prompt "Summarize the design doc" --file docs/design.md
   ```
 - High-reasoning (Opus) with files report:  
   ```bash
-  oracle -m claude-4.1-opus --files-report --prompt "Analyze risk register" --file docs/risk.md
+  triangulator -m claude-4.1-opus --files-report --prompt "Analyze risk register" --file docs/risk.md
   ```
 - Multi-model compare (GPT + Claude):  
   ```bash
-  oracle --models gpt-5.1-pro,claude-4.5-sonnet --prompt "Propose mitigation steps" --file docs/plan.md
+  triangulator --models gpt-5.1-pro,claude-4.5-sonnet --prompt "Propose mitigation steps" --file docs/plan.md
   ```
   Background stays off for Claude; GPT may still use background.
 
@@ -39,7 +39,7 @@ Scope: API support for Claude 4.5 Sonnet and Claude 4.1 Opus in Oracle CLI.
 - Types/config: Claude entries use `apiModel` mapping to Anthropic IDs (`claude-sonnet-4-5`, `claude-opus-4-1`); Opus stays in `ProModelName`; pricing + 200k inputLimit; Anthropic tokenizer wrapper; `supportsBackground=false`. Opus gets `reasoning: high`.
 - Client factory: branch on `claude*` to the Anthropic adapter (messages.stream/create); pass provider-specific `baseUrl`.
 - Env selection: `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL`; log masked key per provider.
-- Token estimates: wrapper flattens Oracle message arrays into text before calling `countTokens`.
+- Token estimates: wrapper flattens Triangulator message arrays into text before calling `countTokens`.
 - Multi-model: shared `runOptions.background` is gated by per-model `supportsBackground`; Claude never enters the background polling path.
 - Docs to update alongside code: this file, `README.md` model list, `docs/configuration.md`, `docs/multimodel.md`.
 
