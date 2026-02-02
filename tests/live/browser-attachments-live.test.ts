@@ -16,7 +16,7 @@ const FITNESS_ROOT =
   process.env.TRIANGULATOR_FITUP_ROOT ??
   '/Users/khangnguyen/working/projects/fitup/fitness';
 
-const MODES = ['search'] as const;
+const MODES = ['search', 'deep_research'] as const;
 
 async function loadLocalBrowserConfig(): Promise<{
   chromeProfile?: string;
