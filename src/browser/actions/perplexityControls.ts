@@ -19,20 +19,35 @@ export async function ensurePerplexityMode(
   mode: PerplexityMode,
   logger: BrowserLogger,
 ) {
-  const outcome = await Runtime.evaluate({
-    expression: buildModeSelectionExpression(mode),
-    awaitPromise: true,
-    returnByValue: true,
-  });
-  const result = outcome.result?.value as
-    | { status: 'selected' | 'already-selected'; label: string }
-    | { status: 'missing' };
-  if (!result || result.status === 'missing') {
-    await logDomFailure(Runtime, logger, 'perplexity-mode');
-    throw new Error('Unable to locate Perplexity mode controls.');
+  const deadline = Date.now() + 7000;
+  let lastDebug: { url?: string; labels?: string[] } | null = null;
+  while (Date.now() < deadline) {
+    const outcome = await Runtime.evaluate({
+      expression: buildModeSelectionExpression(mode),
+      awaitPromise: true,
+      returnByValue: true,
+    });
+    const result = outcome.result?.value as
+      | { status: 'selected' | 'already-selected'; label: string }
+      | { status: 'missing'; debug?: { url?: string; labels?: string[] } };
+    if (result && result.status !== 'missing') {
+      const label = result.label ?? mode;
+      logger(`Perplexity mode: ${label}`);
+      return;
+    }
+    if (result?.debug) {
+      lastDebug = result.debug;
+    }
+    await delay(250);
   }
-  const label = result.label ?? mode;
-  logger(`Perplexity mode: ${label}`);
+  if (lastDebug?.labels?.length) {
+    logger(
+      `Perplexity mode controls missing on ${lastDebug.url ?? 'unknown page'}; ` +
+        `candidates: ${lastDebug.labels.join(' | ')}`,
+    );
+  }
+  await logDomFailure(Runtime, logger, 'perplexity-mode');
+  throw new Error('Unable to locate Perplexity mode controls.');
 }
 
 export async function ensurePerplexityRecency(
@@ -137,15 +152,62 @@ export async function ensurePerplexityThinking(
 function buildModeSelectionExpression(mode: PerplexityMode): string {
   const selectorMap = JSON.stringify(PERPLEXITY_MODE_BUTTONS);
   const modeLiteral = JSON.stringify(mode);
-  return `(() => {
+  return `(async () => {
     ${buildClickDispatcher()}
     const SELECTORS = ${selectorMap};
     const target = SELECTORS[${modeLiteral}];
-    if (!target) return { status: 'missing' };
-    const button = document.querySelector(target);
-    if (!button) return { status: 'missing' };
-    const label = button.getAttribute('aria-label') || button.textContent || ${modeLiteral};
-    const checked = button.getAttribute('aria-checked') === 'true' || button.getAttribute('data-state') === 'checked';
+    const normalize = (value) => (value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+    const wantedLabels = {
+      search: ['search'],
+      deep_research: ['deep research', 'research'],
+      create_files: ['create files and apps', 'create files', 'create', 'labs', 'apps'],
+    };
+    const getLabel = (node) => {
+      if (!node) return '';
+      return (
+        (node.getAttribute?.('aria-label') || '').trim() ||
+        (node.getAttribute?.('title') || '').trim() ||
+        (node.textContent || '').trim()
+      );
+    };
+    const desired = wantedLabels[${modeLiteral}] || [${modeLiteral}];
+    const findButton = () => {
+      const direct = target ? document.querySelector(target) : null;
+      if (direct) return direct;
+      const candidates = Array.from(document.querySelectorAll('button, [role="radio"], [role="tab"]'));
+      return (
+        candidates.find((node) => {
+          const label = normalize(getLabel(node));
+          return desired.some((entry) => label.includes(entry));
+        }) || null
+      );
+    };
+    let button = findButton();
+    if (!button) {
+      const focusTargets = Array.from(document.querySelectorAll('[contenteditable="true"], textarea'));
+      const focusNode = focusTargets.find((node) => node instanceof HTMLElement) || null;
+      if (focusNode) {
+        dispatchClickSequence(focusNode);
+        if (typeof focusNode.focus === 'function') {
+          focusNode.focus();
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        button = findButton();
+      }
+    }
+    if (!button) {
+      const labels = Array.from(document.querySelectorAll('button, [role="radio"], [role="tab"]'))
+        .map((node) => normalize(getLabel(node)))
+        .filter(Boolean)
+        .slice(0, 12);
+      return { status: 'missing', debug: { url: location.href, labels } };
+    }
+    const label = getLabel(button) || ${modeLiteral};
+    const checked =
+      button.getAttribute('aria-checked') === 'true' ||
+      button.getAttribute('aria-selected') === 'true' ||
+      button.getAttribute('aria-pressed') === 'true' ||
+      button.getAttribute('data-state') === 'checked';
     if (checked) return { status: 'already-selected', label };
     dispatchClickSequence(button);
     return { status: 'selected', label };
