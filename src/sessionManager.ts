@@ -40,6 +40,20 @@ export interface BrowserSessionConfig {
   manualLoginCookieSync?: boolean;
   /** Thinking time intensity: 'light', 'standard', 'extended', 'heavy' */
   thinkingTime?: ThinkingTimeLevel;
+  /** Perplexity-only: mode (search, deep_research, create_files). */
+  perplexityMode?: string | null;
+  /** Perplexity-only: thinking toggle. */
+  perplexityThinking?: boolean;
+  /** Perplexity-only: recency filter. */
+  perplexityRecency?: string | null;
+  /** Perplexity-only: sources to enable. */
+  perplexitySources?: string[] | null;
+  /** Perplexity-only: connectors to enable. */
+  perplexityConnectors?: string[] | null;
+  /** Skip unavailable sources/connectors. */
+  skipFailedSources?: boolean;
+  /** Optional model fallback. */
+  modelFallback?: string | null;
 }
 
 export interface BrowserRuntimeMetadata {

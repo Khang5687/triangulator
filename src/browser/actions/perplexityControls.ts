@@ -1,0 +1,297 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import type { BrowserLogger, ChromeClient, PerplexityMode, PerplexityRecency } from '../types.js';
+import {
+  MENU_ITEM_SELECTOR,
+  PERPLEXITY_MODE_BUTTONS,
+  PERPLEXITY_RECENCY_BUTTON_SELECTOR,
+  PERPLEXITY_SOURCES_BUTTON_SELECTOR,
+} from '../constants.js';
+import { logDomFailure } from '../domDebug.js';
+import { delay } from '../utils.js';
+import { buildClickDispatcher } from './domEvents.js';
+
+export async function ensurePerplexityMode(
+  Runtime: ChromeClient['Runtime'],
+  mode: PerplexityMode,
+  logger: BrowserLogger,
+) {
+  const outcome = await Runtime.evaluate({
+    expression: buildModeSelectionExpression(mode),
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  const result = outcome.result?.value as
+    | { status: 'selected' | 'already-selected'; label: string }
+    | { status: 'missing' };
+  if (!result || result.status === 'missing') {
+    await logDomFailure(Runtime, logger, 'perplexity-mode');
+    throw new Error('Unable to locate Perplexity mode controls.');
+  }
+  const label = result.label ?? mode;
+  logger(`Perplexity mode: ${label}`);
+}
+
+export async function ensurePerplexityRecency(
+  Runtime: ChromeClient['Runtime'],
+  recency: PerplexityRecency,
+  logger: BrowserLogger,
+) {
+  const deadline = Date.now() + 7000;
+  while (Date.now() < deadline) {
+    const outcome = await Runtime.evaluate({
+      expression: buildRecencySelectionExpression(recency),
+      awaitPromise: true,
+      returnByValue: true,
+    });
+    const result = outcome.result?.value as
+      | { status: 'selected' | 'already-selected'; label: string }
+      | { status: 'menu-missing' | 'option-missing' | 'button-missing' };
+    if (result && (result.status === 'selected' || result.status === 'already-selected')) {
+      logger(`Recency: ${result.label}`);
+      return;
+    }
+    await delay(250);
+  }
+  await logDomFailure(Runtime, logger, 'perplexity-recency');
+  throw new Error('Unable to select Perplexity recency filter.');
+}
+
+export async function ensurePerplexitySources(
+  Runtime: ChromeClient['Runtime'],
+  logger: BrowserLogger,
+  options: {
+    sources?: string[] | null;
+    connectors?: string[] | null;
+    skipFailedSources?: boolean;
+  },
+) {
+  const sources = options.sources ?? [];
+  const connectors = options.connectors ?? [];
+  const targets = [...sources, ...connectors].filter(Boolean);
+  if (targets.length === 0) {
+    return;
+  }
+  const outcome = await Runtime.evaluate({
+    expression: buildSourcesSelectionExpression(targets),
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  const result = outcome.result?.value as {
+    status: 'ok' | 'menu-missing' | 'button-missing';
+    missing?: string[];
+    disabled?: string[];
+    toggled?: string[];
+    already?: string[];
+    snapshot?: { sample: string; candidates: string[] };
+  };
+  if (!result || result.status !== 'ok') {
+    await logDomFailure(Runtime, logger, 'perplexity-sources');
+  }
+
+  const missing = result?.missing ?? [];
+  const disabled = result?.disabled ?? [];
+  if (missing.length === 0 && disabled.length === 0) {
+    if (result?.toggled?.length) {
+      logger(`Sources updated: ${result.toggled.join(', ')}`);
+    }
+    return;
+  }
+
+  const skip = options.skipFailedSources !== false;
+  if (skip) {
+    logger(`Sources skipped (unavailable): ${[...missing, ...disabled].join(', ')}`);
+    return;
+  }
+  const logPath = await writeSourcesDebugLog(result);
+  throw new Error(
+    `Unable to enable Perplexity sources/connectors: ${[...missing, ...disabled].join(', ')}. ` +
+      `Debug log saved to ${logPath}`,
+  );
+}
+
+export async function ensurePerplexityThinking(
+  Runtime: ChromeClient['Runtime'],
+  enabled: boolean,
+  logger: BrowserLogger,
+) {
+  const outcome = await Runtime.evaluate({
+    expression: buildThinkingToggleExpression(enabled),
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  const result = outcome.result?.value as
+    | { status: 'toggled'; label?: string }
+    | { status: 'already'; label?: string }
+    | { status: 'unsupported' };
+  if (!result || result.status === 'unsupported') {
+    logger('Thinking toggle: unsupported; continuing with default.');
+    return;
+  }
+  logger(`Thinking toggle: ${result.status === 'already' ? 'already set' : 'updated'}`);
+}
+
+function buildModeSelectionExpression(mode: PerplexityMode): string {
+  const selectorMap = JSON.stringify(PERPLEXITY_MODE_BUTTONS);
+  const modeLiteral = JSON.stringify(mode);
+  return `(() => {
+    ${buildClickDispatcher()}
+    const SELECTORS = ${selectorMap};
+    const target = SELECTORS[${modeLiteral}];
+    if (!target) return { status: 'missing' };
+    const button = document.querySelector(target);
+    if (!button) return { status: 'missing' };
+    const label = button.getAttribute('aria-label') || button.textContent || ${modeLiteral};
+    const checked = button.getAttribute('aria-checked') === 'true' || button.getAttribute('data-state') === 'checked';
+    if (checked) return { status: 'already-selected', label };
+    dispatchClickSequence(button);
+    return { status: 'selected', label };
+  })()`;
+}
+
+function buildRecencySelectionExpression(recency: PerplexityRecency): string {
+  const recencyLiteral = JSON.stringify(recency);
+  const buttonSelector = JSON.stringify(PERPLEXITY_RECENCY_BUTTON_SELECTOR);
+  const itemSelector = JSON.stringify(MENU_ITEM_SELECTOR);
+  return `(async () => {
+    ${buildClickDispatcher()}
+    const RECENCY = ${recencyLiteral};
+    const BUTTON_SELECTOR = ${buttonSelector};
+    const ITEM_SELECTOR = ${itemSelector};
+    const labelMap = {
+      all: 'All Time',
+      day: 'Today',
+      week: 'Last Week',
+      month: 'Last Month',
+      year: 'Last Year',
+    };
+    const desiredLabel = labelMap[RECENCY];
+    const button = document.querySelector(BUTTON_SELECTOR);
+    if (!button) return { status: 'button-missing' };
+    dispatchClickSequence(button);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const normalize = (value) => (value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+    const labelNorm = normalize(desiredLabel);
+    const items = Array.from(document.querySelectorAll(ITEM_SELECTOR));
+    const match = items.find((node) => normalize(node.textContent) === labelNorm);
+    if (!match) return { status: 'option-missing' };
+    const checked =
+      match.getAttribute('aria-checked') === 'true' ||
+      match.getAttribute('aria-selected') === 'true' ||
+      match.getAttribute('data-state') === 'checked';
+    if (checked) return { status: 'already-selected', label: desiredLabel };
+    dispatchClickSequence(match);
+    return { status: 'selected', label: desiredLabel };
+  })()`;
+}
+
+function buildSourcesSelectionExpression(targets: string[]): string {
+  const targetsLiteral = JSON.stringify(targets);
+  const buttonSelector = JSON.stringify(PERPLEXITY_SOURCES_BUTTON_SELECTOR);
+  return `(async () => {
+    ${buildClickDispatcher()}
+    const BUTTON_SELECTOR = ${buttonSelector};
+    const targets = ${targetsLiteral}.map((t) => (t || '').trim()).filter(Boolean);
+    const button = document.querySelector(BUTTON_SELECTOR);
+    if (!button) return { status: 'button-missing', missing: targets };
+    dispatchClickSequence(button);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const normalize = (value) => (value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\\s+/g, ' ').trim();
+    const getLabel = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return '';
+      return (
+        (node.getAttribute('aria-label') || '').trim() ||
+        (node.getAttribute('title') || '').trim() ||
+        (node.textContent || '').trim()
+      );
+    };
+    const isDisabled = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return true;
+      if (node.hasAttribute('disabled')) return true;
+      const aria = node.getAttribute('aria-disabled');
+      const dataDisabled = node.getAttribute('data-disabled');
+      return aria === 'true' || dataDisabled === 'true';
+    };
+    const isSelected = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return false;
+      const ariaChecked = node.getAttribute('aria-checked');
+      const ariaSelected = node.getAttribute('aria-selected');
+      const dataState = (node.getAttribute('data-state') || '').toLowerCase();
+      return ariaChecked === 'true' || ariaSelected === 'true' || dataState === 'checked' || dataState === 'selected';
+    };
+    const candidates = Array.from(
+      document.querySelectorAll('button, [role=menuitem], [role=menuitemcheckbox], label, div, span'),
+    )
+      .map((node) => ({ node, text: getLabel(node) }))
+      .filter((entry) => entry.text.length > 0 && entry.text.length < 80);
+    const missing = [];
+    const disabled = [];
+    const toggled = [];
+    const already = [];
+    for (const target of targets) {
+      const normTarget = normalize(target);
+      const match = candidates.find((entry) => normalize(entry.text).includes(normTarget));
+      if (!match) {
+        missing.push(target);
+        continue;
+      }
+      const node = match.node;
+      if (isDisabled(node)) {
+        disabled.push(target);
+        continue;
+      }
+      if (isSelected(node)) {
+        already.push(target);
+        continue;
+      }
+      dispatchClickSequence(node);
+      toggled.push(target);
+    }
+    dispatchClickSequence(button);
+    return {
+      status: 'ok',
+      missing,
+      disabled,
+      toggled,
+      already,
+      snapshot: {
+        sample: (document.body?.innerText || '').slice(0, 500),
+        candidates: candidates.slice(0, 30).map((entry) => entry.text),
+      },
+    };
+  })()`;
+}
+
+function buildThinkingToggleExpression(enabled: boolean): string {
+  const enabledLiteral = JSON.stringify(enabled);
+  return `(() => {
+    ${buildClickDispatcher()}
+    const ENABLED = ${enabledLiteral};
+    const normalize = (value) => (value || '').toLowerCase();
+    const candidates = Array.from(document.querySelectorAll('button, [role=switch], [role=checkbox]'));
+    const toggle = candidates.find((node) => {
+      const label = normalize(node.getAttribute('aria-label') || node.textContent || '');
+      return label.includes('thinking') || label.includes('reasoning');
+    });
+    if (!toggle) return { status: 'unsupported' };
+    const isOn =
+      toggle.getAttribute('aria-checked') === 'true' ||
+      toggle.getAttribute('data-state') === 'checked' ||
+      toggle.getAttribute('aria-pressed') === 'true';
+    if ((ENABLED && isOn) || (!ENABLED && !isOn)) {
+      return { status: 'already', label: toggle.getAttribute('aria-label') || '' };
+    }
+    dispatchClickSequence(toggle);
+    return { status: 'toggled', label: toggle.getAttribute('aria-label') || '' };
+  })()`;
+}
+
+async function writeSourcesDebugLog(payload: unknown): Promise<string> {
+  const dir = path.join(os.homedir(), '.triangulator', 'debug');
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  const filename = `perplexity-sources-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+  const fullPath = path.join(dir, filename);
+  await fs.writeFile(fullPath, JSON.stringify(payload, null, 2), 'utf8');
+  return fullPath;
+}

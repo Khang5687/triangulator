@@ -5,6 +5,7 @@ import {
   CONVERSATION_TURN_SELECTOR,
   COPY_BUTTON_SELECTOR,
   FINISHED_ACTIONS_SELECTOR,
+  PERPLEXITY_CONVERSATION_TURN_SELECTOR,
   STOP_BUTTON_SELECTOR,
 } from '../constants.js';
 import { delay } from '../utils.js';
@@ -407,7 +408,13 @@ async function isCompletionVisible(Runtime: ChromeClient['Runtime']): Promise<bo
           return Boolean(node.querySelector(ASSISTANT_SELECTOR) || node.querySelector('[data-testid*="assistant"]'));
         };
 
-        const turns = Array.from(document.querySelectorAll('${CONVERSATION_TURN_SELECTOR}'));
+        const CONVERSATION_SELECTOR = (() => {
+          const href = typeof location === 'object' && location.href ? location.href : '';
+          return href.includes('perplexity.ai')
+            ? '${PERPLEXITY_CONVERSATION_TURN_SELECTOR}'
+            : '${CONVERSATION_TURN_SELECTOR}';
+        })();
+        const turns = Array.from(document.querySelectorAll(CONVERSATION_SELECTOR));
         let lastAssistantTurn = null;
         for (let i = turns.length - 1; i >= 0; i--) {
           if (isAssistantTurn(turns[i])) {
@@ -490,7 +497,7 @@ function buildAssistantSnapshotExpression(minTurnIndex?: number): string {
       return extracted;
     }
     // Fallback for Spaces view: answers can live outside conversation turns.
-    const fallback = ${buildMarkdownFallbackExtractor('MIN_TURN_INDEX')};
+    const fallback = (${buildMarkdownFallbackExtractor('MIN_TURN_INDEX')})();
     return fallback ?? extracted;
   })()`;
 }
@@ -508,7 +515,12 @@ function buildResponseObserverExpression(timeoutMs: number, minTurnIndex?: numbe
     const SELECTORS = ${selectorsLiteral};
     const STOP_SELECTOR = '${STOP_BUTTON_SELECTOR}';
     const FINISHED_SELECTOR = '${FINISHED_ACTIONS_SELECTOR}';
-    const CONVERSATION_SELECTOR = ${conversationLiteral};
+    const CONVERSATION_SELECTOR = (() => {
+      const href = typeof location === 'object' && location.href ? location.href : '';
+      return href.includes('perplexity.ai')
+        ? ${JSON.stringify(PERPLEXITY_CONVERSATION_TURN_SELECTOR)}
+        : ${conversationLiteral};
+    })();
     const ASSISTANT_SELECTOR = ${assistantLiteral};
     // Learned: settling avoids capturing mid-stream HTML; keep short.
     const settleDelayMs = 800;
@@ -528,6 +540,7 @@ function buildResponseObserverExpression(timeoutMs: number, minTurnIndex?: numbe
       if (role === 'assistant') return true;
       const testId = (node.getAttribute('data-testid') || '').toLowerCase();
       if (testId.includes('assistant')) return true;
+      if (node.matches?.(ASSISTANT_SELECTOR)) return true;
       return Boolean(node.querySelector(ASSISTANT_SELECTOR) || node.querySelector('[data-testid*="assistant"]'));
     };
 
@@ -680,10 +693,14 @@ function buildResponseObserverExpression(timeoutMs: number, minTurnIndex?: numbe
 
 function buildAssistantExtractor(functionName: string): string {
   const conversationLiteral = JSON.stringify(CONVERSATION_TURN_SELECTOR);
+  const perplexityLiteral = JSON.stringify(PERPLEXITY_CONVERSATION_TURN_SELECTOR);
   const assistantLiteral = JSON.stringify(ASSISTANT_ROLE_SELECTOR);
   return `const ${functionName} = () => {
     ${buildClickDispatcher()}
-    const CONVERSATION_SELECTOR = ${conversationLiteral};
+    const CONVERSATION_SELECTOR = (() => {
+      const href = typeof location === 'object' && location.href ? location.href : '';
+      return href.includes('perplexity.ai') ? ${perplexityLiteral} : ${conversationLiteral};
+    })();
     const ASSISTANT_SELECTOR = ${assistantLiteral};
     const isAssistantTurn = (node) => {
       if (!(node instanceof HTMLElement)) return false;
@@ -697,6 +714,9 @@ function buildAssistantExtractor(functionName: string): string {
       }
       const testId = (node.getAttribute('data-testid') || '').toLowerCase();
       if (testId.includes('assistant')) {
+        return true;
+      }
+      if (node.matches?.(ASSISTANT_SELECTOR)) {
         return true;
       }
       return Boolean(node.querySelector(ASSISTANT_SELECTOR) || node.querySelector('[data-testid*="assistant"]'));
@@ -788,7 +808,12 @@ function buildMarkdownFallbackExtractor(minTurnLiteral?: string): string {
       }
     }
     if (!root) return null;
-    const CONVERSATION_SELECTOR = '${CONVERSATION_TURN_SELECTOR}';
+    const CONVERSATION_SELECTOR = (() => {
+      const href = typeof location === 'object' && location.href ? location.href : '';
+      return href.includes('perplexity.ai')
+        ? '${PERPLEXITY_CONVERSATION_TURN_SELECTOR}'
+        : '${CONVERSATION_TURN_SELECTOR}';
+    })();
     const turnNodes = Array.from(document.querySelectorAll(CONVERSATION_SELECTOR));
     const hasTurns = turnNodes.length > 0;
     const resolveTurnIndex = (node) => {
@@ -911,18 +936,24 @@ function buildCopyExpression(meta: { messageId?: string | null; turnId?: string 
           return button;
         }
       }
-      const CONVERSATION_SELECTOR = ${JSON.stringify(CONVERSATION_TURN_SELECTOR)};
+    const CONVERSATION_SELECTOR = (() => {
+      const href = typeof location === 'object' && location.href ? location.href : '';
+      return href.includes('perplexity.ai')
+        ? ${JSON.stringify(PERPLEXITY_CONVERSATION_TURN_SELECTOR)}
+        : ${JSON.stringify(CONVERSATION_TURN_SELECTOR)};
+    })();
       const ASSISTANT_SELECTOR = '${ASSISTANT_ROLE_SELECTOR}';
-      const isAssistantTurn = (node) => {
-        if (!(node instanceof HTMLElement)) return false;
-        const turnAttr = (node.getAttribute('data-turn') || node.dataset?.turn || '').toLowerCase();
-        if (turnAttr === 'assistant') return true;
-        const role = (node.getAttribute('data-message-author-role') || node.dataset?.messageAuthorRole || '').toLowerCase();
-        if (role === 'assistant') return true;
-        const testId = (node.getAttribute('data-testid') || '').toLowerCase();
-        if (testId.includes('assistant')) return true;
-        return Boolean(node.querySelector(ASSISTANT_SELECTOR) || node.querySelector('[data-testid*="assistant"]'));
-      };
+        const isAssistantTurn = (node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          const turnAttr = (node.getAttribute('data-turn') || node.dataset?.turn || '').toLowerCase();
+          if (turnAttr === 'assistant') return true;
+          const role = (node.getAttribute('data-message-author-role') || node.dataset?.messageAuthorRole || '').toLowerCase();
+          if (role === 'assistant') return true;
+          const testId = (node.getAttribute('data-testid') || '').toLowerCase();
+          if (testId.includes('assistant')) return true;
+          if (node.matches?.(ASSISTANT_SELECTOR)) return true;
+          return Boolean(node.querySelector(ASSISTANT_SELECTOR) || node.querySelector('[data-testid*="assistant"]'));
+        };
       const turns = Array.from(document.querySelectorAll(CONVERSATION_SELECTOR));
       for (let i = turns.length - 1; i >= 0; i -= 1) {
         const turn = turns[i];

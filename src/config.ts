@@ -23,6 +23,20 @@ export interface BrowserConfigDefaults {
   chatgptUrl?: string | null;
   /** Legacy alias (Oracle). */
   url?: string;
+  /** Perplexity-only: mode (search, deep_research, create_files). */
+  perplexityMode?: string | null;
+  /** Perplexity-only: thinking toggle (true/false). */
+  perplexityThinking?: boolean;
+  /** Perplexity-only: recency filter (all/day/week/month/year). */
+  perplexityRecency?: string | null;
+  /** Perplexity-only: sources to enable (web, academic, social). */
+  perplexitySources?: string[] | null;
+  /** Perplexity-only: connectors to enable. */
+  perplexityConnectors?: string[] | null;
+  /** Skip unavailable sources/connectors (default true). */
+  skipFailedSources?: boolean;
+  /** Optional model fallback when requested model is unavailable. */
+  modelFallback?: string | null;
   /** Delegate browser automation to a remote `triangulator serve` instance (host:port). */
   remoteHost?: string | null;
   /** Access token clients must provide to the remote `triangulator serve` instance. */

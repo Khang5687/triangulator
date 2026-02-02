@@ -6,6 +6,8 @@ import type { ThinkingTimeLevel } from '../oracle/types.js';
 export type ChromeClient = Awaited<ReturnType<typeof CDP>>;
 export type CookieParam = Protocol.Network.CookieParam;
 export type BrowserModelStrategy = 'select' | 'current' | 'ignore';
+export type PerplexityMode = 'search' | 'deep_research' | 'create_files';
+export type PerplexityRecency = 'all' | 'day' | 'week' | 'month' | 'year';
 
 export type BrowserLogger = ((message: string) => void) & {
   verbose?: boolean;
@@ -47,6 +49,20 @@ export interface BrowserAutomationConfig {
   manualLoginCookieSync?: boolean;
   /** Thinking time intensity level for Thinking/Pro models: light, standard, extended, heavy */
   thinkingTime?: ThinkingTimeLevel;
+  /** Perplexity-only: choose the Space mode. */
+  perplexityMode?: PerplexityMode;
+  /** Perplexity-only: toggle thinking when supported by the model. */
+  perplexityThinking?: boolean;
+  /** Perplexity-only: search recency filter. */
+  perplexityRecency?: PerplexityRecency;
+  /** Perplexity-only: sources to enable (web, academic, social). */
+  perplexitySources?: string[] | null;
+  /** Perplexity-only: connectors to enable (e.g., github, asana). */
+  perplexityConnectors?: string[] | null;
+  /** If true, skip unavailable sources/connectors; otherwise abort. */
+  skipFailedSources?: boolean;
+  /** Optional model fallback if requested model is unavailable. */
+  modelFallback?: string | null;
 }
 
 export interface BrowserRunOptions {

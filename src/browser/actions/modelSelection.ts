@@ -3,6 +3,7 @@ import {
   MENU_CONTAINER_SELECTOR,
   MENU_ITEM_SELECTOR,
   MODEL_BUTTON_SELECTOR,
+  PERPLEXITY_MODEL_BUTTON_SELECTOR,
 } from '../constants.js';
 import { logDomFailure } from '../domDebug.js';
 import { buildClickDispatcher } from './domEvents.js';
@@ -12,6 +13,7 @@ export async function ensureModelSelection(
   desiredModel: string,
   logger: BrowserLogger,
   strategy: BrowserModelStrategy = 'select',
+  options?: { fallback?: string | null },
 ) {
   const hostCheck = await Runtime.evaluate({
     expression: 'location.hostname',
@@ -19,8 +21,34 @@ export async function ensureModelSelection(
   }).catch(() => null);
   const host = typeof hostCheck?.result?.value === 'string' ? hostCheck.result.value : '';
   if (host.includes('perplexity.ai')) {
-    logger('Model picker: skipped (unsupported on Perplexity)');
-    return;
+    if (strategy === 'ignore') {
+      logger('Model picker: skipped (strategy=ignore)');
+      return;
+    }
+    if (strategy === 'current') {
+      logger('Model picker: skipped (strategy=current)');
+      return;
+    }
+    const fallback = options?.fallback?.trim?.() || null;
+    const result = await ensurePerplexityModelSelection(Runtime, desiredModel, logger);
+    if (result.status === 'selected' || result.status === 'already-selected') {
+      logger(`Model picker: ${result.label ?? desiredModel}`);
+      return;
+    }
+    if (fallback && fallback !== desiredModel) {
+      logger(`Model picker: "${desiredModel}" unavailable; falling back to "${fallback}".`);
+      const fallbackResult = await ensurePerplexityModelSelection(Runtime, fallback, logger);
+      if (fallbackResult.status === 'selected' || fallbackResult.status === 'already-selected') {
+        logger(`Model picker: ${fallbackResult.label ?? fallback}`);
+        return;
+      }
+    }
+    const hint = result.reason ?? 'Unavailable';
+    throw new Error(
+      `Perplexity model "${desiredModel}" unavailable (${hint}). ` +
+        'Rerun triangulator with --model <name> (recommended: --model gpt-5.2 --perplexity-thinking true) ' +
+        'or set --model-fallback in config.',
+    );
   }
   const outcome = await Runtime.evaluate({
     expression: buildModelSelectionExpression(desiredModel, strategy),
@@ -60,6 +88,37 @@ export async function ensureModelSelection(
       throw new Error('Unable to locate the model selector button.');
     }
   }
+}
+
+async function ensurePerplexityModelSelection(
+  Runtime: ChromeClient['Runtime'],
+  desiredModel: string,
+  logger: BrowserLogger,
+): Promise<{ status: 'selected' | 'already-selected' | 'option-not-found' | 'button-missing' | 'disabled'; label?: string; reason?: string }> {
+  const outcome = await Runtime.evaluate({
+    expression: buildPerplexityModelSelectionExpression(desiredModel),
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  const result = outcome.result?.value as
+    | { status: 'selected'; label?: string }
+    | { status: 'already-selected'; label?: string }
+    | { status: 'option-not-found'; available?: string[] }
+    | { status: 'button-missing' }
+    | { status: 'disabled'; label?: string; reason?: string }
+    | undefined;
+  if (!result) {
+    await logDomFailure(Runtime, logger, 'perplexity-model');
+    return { status: 'button-missing', reason: 'Unknown model picker state' };
+  }
+  if (result.status === 'option-not-found') {
+    const available = result.available?.length ? ` Available: ${result.available.join(', ')}.` : '';
+    return { status: 'option-not-found', reason: `Option not found.${available}` };
+  }
+  if (result.status === 'disabled') {
+    return { status: 'disabled', label: result.label, reason: result.reason ?? 'Model disabled' };
+  }
+  return result;
 }
 
 /**
@@ -379,6 +438,95 @@ function buildModelSelectionExpression(targetModel: string, strategy: BrowserMod
       };
       attempt();
     });
+  })()`;
+}
+
+function buildPerplexityModelSelectionExpression(targetModel: string): string {
+  const targetLiteral = JSON.stringify(targetModel);
+  const buttonSelector = JSON.stringify(PERPLEXITY_MODEL_BUTTON_SELECTOR);
+  const itemSelector = JSON.stringify('[role="menuitem"], [role="menuitemradio"], [role="option"], button');
+  const menuSelector = JSON.stringify(MENU_CONTAINER_SELECTOR);
+  return `(async () => {
+    ${buildClickDispatcher()}
+    const BUTTON_SELECTOR = ${buttonSelector};
+    const ITEM_SELECTOR = ${itemSelector};
+    const MENU_SELECTOR = ${menuSelector};
+    const TARGET = ${targetLiteral};
+    const normalize = (value) => (value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\\s+/g, ' ').trim();
+    const normalizedTarget = normalize(TARGET);
+    const wantsPro = normalizedTarget.includes(' pro');
+    const wantsInstant = normalizedTarget.includes('instant');
+    const wantsThinking = normalizedTarget.includes('thinking');
+    const wantsMax = normalizedTarget.includes('max');
+    const stripTokens = (value) =>
+      normalize(value)
+        .split(' ')
+        .filter((token) => token && !['pro', 'instant', 'thinking', 'max', 'model'].includes(token));
+    const requiredMatch = (normalized) => {
+      if (wantsPro && !normalized.includes(' pro')) return false;
+      if (wantsInstant && !normalized.includes('instant')) return false;
+      if (wantsThinking && !normalized.includes('thinking')) return false;
+      if (wantsMax && !normalized.includes('max')) return false;
+      return true;
+    };
+    const button = document.querySelector(BUTTON_SELECTOR);
+    if (!button) return { status: 'button-missing' };
+    const currentLabel = (button.getAttribute('aria-label') || button.textContent || '').trim();
+    if (currentLabel) {
+      const currentNormalized = normalize(currentLabel);
+      if (requiredMatch(currentNormalized)) {
+        const currentTokens = stripTokens(currentLabel);
+        const targetTokens = stripTokens(TARGET);
+        if (
+          currentNormalized === normalizedTarget ||
+          (currentTokens.length && targetTokens.length && targetTokens.every((t) => currentTokens.includes(t)))
+        ) {
+          return { status: 'already-selected', label: currentLabel };
+        }
+      }
+    }
+    dispatchClickSequence(button);
+    const findMenu = () => {
+      const menus = Array.from(document.querySelectorAll(MENU_SELECTOR));
+      return menus.length ? menus[menus.length - 1] : null;
+    };
+    let menu = findMenu();
+    const deadline = performance.now() + 1200;
+    while (!menu && performance.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      menu = findMenu();
+    }
+    const scope = menu || document;
+    const items = Array.from(scope.querySelectorAll(ITEM_SELECTOR));
+    const available = items.map((node) => (node.textContent || '').trim()).filter(Boolean);
+    const targetTokens = stripTokens(TARGET);
+    const best = items
+      .map((node) => {
+        const label = (node.textContent || '').trim();
+        const normalized = normalize(label);
+        if (!requiredMatch(normalized)) {
+          return { node, label, score: 0 };
+        }
+        const tokens = stripTokens(label);
+        let score = 0;
+        if (normalized === normalizedTarget) score += 200;
+        if (tokens.length && targetTokens.every((t) => tokens.includes(t))) score += 150;
+        if (label.toLowerCase().includes(TARGET.toLowerCase())) score += 80;
+        return { node, label, score };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)[0];
+    if (!best) {
+      return { status: 'option-not-found', available };
+    }
+    const isDisabled =
+      best.node.getAttribute('aria-disabled') === 'true' ||
+      best.node.getAttribute('data-disabled') === 'true';
+    if (isDisabled) {
+      return { status: 'disabled', label: best.label, reason: 'Model disabled (plan restriction)' };
+    }
+    dispatchClickSequence(best.node);
+    return { status: 'selected', label: best.label };
   })()`;
 }
 

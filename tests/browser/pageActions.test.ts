@@ -23,7 +23,10 @@ beforeEach(() => {
 describe('ensureModelSelection', () => {
   test('logs when model already selected', async () => {
     const runtime = {
-      evaluate: vi.fn().mockResolvedValue({ result: { value: { status: 'already-selected', label: 'GPT-5.2 Pro' } } }),
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce({ result: { value: 'chatgpt.com' } })
+        .mockResolvedValue({ result: { value: { status: 'already-selected', label: 'GPT-5.2 Pro' } } }),
     } as unknown as ChromeClient['Runtime'];
     await expect(ensureModelSelection(runtime, 'GPT-5.2 Pro', logger)).resolves.toBeUndefined();
     expect(logger).toHaveBeenCalledWith('Model picker: GPT-5.2 Pro');
@@ -31,7 +34,10 @@ describe('ensureModelSelection', () => {
 
   test('throws when option missing', async () => {
     const runtime = {
-      evaluate: vi.fn().mockResolvedValue({ result: { value: { status: 'option-not-found' } } }),
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce({ result: { value: 'chatgpt.com' } })
+        .mockResolvedValue({ result: { value: { status: 'option-not-found' } } }),
     } as unknown as ChromeClient['Runtime'];
     await expect(ensureModelSelection(runtime, 'GPT-5 Pro', logger)).rejects.toThrow(
       /Unable to find model option matching/,
@@ -40,21 +46,27 @@ describe('ensureModelSelection', () => {
 
   test('includes temporary chat hint when Pro is unavailable', async () => {
     const runtime = {
-      evaluate: vi.fn().mockResolvedValue({
-        result: {
-          value: {
-            status: 'option-not-found',
-            hint: { temporaryChat: true, availableOptions: ['Auto', 'Thinking'] },
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce({ result: { value: 'chatgpt.com' } })
+        .mockResolvedValue({
+          result: {
+            value: {
+              status: 'option-not-found',
+              hint: { temporaryChat: true, availableOptions: ['Auto', 'Thinking'] },
+            },
           },
-        },
-      }),
+        }),
     } as unknown as ChromeClient['Runtime'];
     await expect(ensureModelSelection(runtime, 'GPT-5.2 Pro', logger)).rejects.toThrow(/Temporary Chat/i);
   });
 
   test('throws when button missing', async () => {
     const runtime = {
-      evaluate: vi.fn().mockResolvedValue({ result: { value: { status: 'button-missing' } } }),
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce({ result: { value: 'chatgpt.com' } })
+        .mockResolvedValue({ result: { value: { status: 'button-missing' } } }),
     } as unknown as ChromeClient['Runtime'];
     await expect(ensureModelSelection(runtime, 'Instant', logger)).rejects.toThrow(
       /Unable to locate the model selector button/,

@@ -13,7 +13,7 @@ export function supportsOscProgress(
 ): boolean {
   const force = env.TRIANGULATOR_FORCE_OSC_PROGRESS ?? env.ORACLE_FORCE_OSC_PROGRESS;
   const disable = env.TRIANGULATOR_NO_OSC_PROGRESS ?? env.ORACLE_NO_OSC_PROGRESS;
-  const mappedEnv = {
+  const mappedEnv: NodeJS.ProcessEnv = {
     ...env,
     TRIANGULATOR_FORCE_OSC_PROGRESS: force,
     TRIANGULATOR_NO_OSC_PROGRESS: disable,
@@ -31,7 +31,7 @@ export function startOscProgress(options: OscProgressOptions = {}): () => void {
   const env = options.env ?? process.env;
   const force = env.TRIANGULATOR_FORCE_OSC_PROGRESS ?? env.ORACLE_FORCE_OSC_PROGRESS;
   const disable = env.TRIANGULATOR_NO_OSC_PROGRESS ?? env.ORACLE_NO_OSC_PROGRESS;
-  const mappedEnv = {
+  const mappedEnv: NodeJS.ProcessEnv = {
     ...env,
     TRIANGULATOR_FORCE_OSC_PROGRESS: force,
     TRIANGULATOR_NO_OSC_PROGRESS: disable,

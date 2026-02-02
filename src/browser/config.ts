@@ -2,6 +2,12 @@ import { PERPLEXITY_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET } from './
 import { normalizeBrowserModelStrategy } from './modelStrategy.js';
 import type { BrowserAutomationConfig, ResolvedBrowserConfig } from './types.js';
 import { normalizePerplexityUrl } from './utils.js';
+import {
+  normalizePerplexityMode,
+  normalizePerplexityRecency,
+  normalizePerplexitySources,
+  normalizePerplexityConnectors,
+} from './perplexityConfig.js';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -11,6 +17,7 @@ export const DEFAULT_BROWSER_CONFIG: ResolvedBrowserConfig = {
   chromeCookiePath: null,
   url: PERPLEXITY_URL,
   perplexityUrl: PERPLEXITY_URL,
+  chatgptUrl: PERPLEXITY_URL,
   timeoutMs: 1_200_000,
   debugPort: null,
   inputTimeoutMs: 60_000,
@@ -30,6 +37,13 @@ export const DEFAULT_BROWSER_CONFIG: ResolvedBrowserConfig = {
   manualLogin: false,
   manualLoginProfileDir: null,
   manualLoginCookieSync: false,
+  perplexityMode: 'search',
+  perplexityThinking: undefined,
+  perplexityRecency: 'year',
+  perplexitySources: null,
+  perplexityConnectors: null,
+  skipFailedSources: true,
+  modelFallback: null,
 };
 
 export function resolveBrowserConfig(config: BrowserAutomationConfig | undefined): ResolvedBrowserConfig {
@@ -60,11 +74,20 @@ export function resolveBrowserConfig(config: BrowserAutomationConfig | undefined
     process.env.TRIANGULATOR_BROWSER_PROFILE_DIR ??
     process.env.ORACLE_BROWSER_PROFILE_DIR ??
     path.join(os.homedir(), '.triangulator', 'browser-profile');
+  const normalizedMode =
+    normalizePerplexityMode(config?.perplexityMode ?? null) ?? DEFAULT_BROWSER_CONFIG.perplexityMode;
+  const normalizedRecency =
+    normalizePerplexityRecency(config?.perplexityRecency ?? null) ?? DEFAULT_BROWSER_CONFIG.perplexityRecency;
+  const normalizedSources =
+    normalizePerplexitySources(config?.perplexitySources ?? null) ?? DEFAULT_BROWSER_CONFIG.perplexitySources;
+  const normalizedConnectors =
+    normalizePerplexityConnectors(config?.perplexityConnectors ?? null) ?? DEFAULT_BROWSER_CONFIG.perplexityConnectors;
   return {
     ...DEFAULT_BROWSER_CONFIG,
     ...(config ?? {}),
     url: normalizedUrl,
     perplexityUrl: normalizedUrl,
+    chatgptUrl: normalizedUrl,
     timeoutMs: config?.timeoutMs ?? DEFAULT_BROWSER_CONFIG.timeoutMs,
     debugPort: config?.debugPort ?? debugPortEnv ?? DEFAULT_BROWSER_CONFIG.debugPort,
     inputTimeoutMs: config?.inputTimeoutMs ?? DEFAULT_BROWSER_CONFIG.inputTimeoutMs,
@@ -87,6 +110,13 @@ export function resolveBrowserConfig(config: BrowserAutomationConfig | undefined
     manualLogin,
     manualLoginProfileDir: manualLogin ? resolvedProfileDir : null,
     manualLoginCookieSync: config?.manualLoginCookieSync ?? DEFAULT_BROWSER_CONFIG.manualLoginCookieSync,
+    perplexityMode: normalizedMode,
+    perplexityThinking: config?.perplexityThinking ?? DEFAULT_BROWSER_CONFIG.perplexityThinking,
+    perplexityRecency: normalizedRecency,
+    perplexitySources: normalizedSources,
+    perplexityConnectors: normalizedConnectors,
+    skipFailedSources: config?.skipFailedSources ?? DEFAULT_BROWSER_CONFIG.skipFailedSources,
+    modelFallback: config?.modelFallback ?? DEFAULT_BROWSER_CONFIG.modelFallback,
   };
 }
 

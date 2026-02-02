@@ -61,6 +61,13 @@ export async function uploadAttachmentFile(
           }
           return null;
         };
+        const conversationSelectors = ['.prose', '.markdown', '[data-testid*="answer"]', '[data-testid*="response"]', 'article'];
+        const conversationSelector = conversationSelectors.join(',');
+        const isConversationContainer = (node, promptNode) => {
+          if (!node || !node.querySelectorAll) return false;
+          const matches = Array.from(node.querySelectorAll(conversationSelectors.join(',')));
+          return matches.some((el) => promptNode ? !promptNode.contains(el) : true);
+        };
         const sendSelectors = ${JSON.stringify(SEND_BUTTON_SELECTORS)};
         const attachmentSelectors = [
           'input[type="file"]',
@@ -71,36 +78,32 @@ export async function uploadAttachmentFile(
         ];
         const locateComposerRoot = () => {
           const promptNode = findPromptNode();
-          if (promptNode) {
-            const initial =
-              promptNode.closest('[data-testid*="composer"]') ??
-              promptNode.closest('form') ??
-              promptNode.parentElement ??
-              document.body;
-            let current = initial;
-            let fallback = initial;
-            while (current && current !== document.body) {
-              const hasSend = sendSelectors.some((selector) => current.querySelector(selector));
-              if (hasSend) {
-                fallback = current;
-                const hasAttachment = attachmentSelectors.some((selector) => current.querySelector(selector));
-                if (hasAttachment) {
-                  return current;
-                }
-              }
-              current = current.parentElement;
-            }
-            return fallback ?? initial;
+          if (!promptNode) {
+            return document.querySelector('form') ?? document.body;
           }
-          return document.querySelector('form') ?? document.body;
+          let current = promptNode;
+          let fallback = promptNode.closest('form') ?? promptNode.parentElement ?? document.body;
+          while (current && current !== document.body) {
+            const hasSend = sendSelectors.some((selector) => current.querySelector(selector));
+            if (hasSend) {
+              const hasConversation = isConversationContainer(current, promptNode);
+              if (!hasConversation) {
+                return current;
+              }
+              if (fallback === document.body) {
+                fallback = current;
+              }
+              const hasAttachment = attachmentSelectors.some((selector) => current.querySelector(selector));
+              if (hasAttachment && !hasConversation) {
+                return current;
+              }
+            }
+            current = current.parentElement;
+          }
+          return fallback;
         };
         const root = locateComposerRoot();
-        const scope = (() => {
-          if (!root) return document.body;
-          const parent = root.parentElement;
-          const parentHasSend = parent && sendSelectors.some((selector) => parent.querySelector(selector));
-          return parentHasSend ? parent : root;
-        })();
+        const scope = root ?? document.body;
         const rootTextRaw = root ? (root.innerText || root.textContent || '') : '';
         const chipSelector = [
           '[data-testid*="attachment"]',
@@ -112,8 +115,20 @@ export async function uploadAttachmentFile(
           '[aria-label*="remove"]',
         ].join(',');
         const localCandidates = scope ? Array.from(scope.querySelectorAll(chipSelector)) : [];
-        const globalCandidates = Array.from(document.querySelectorAll(chipSelector));
-        const matchCandidates = localCandidates.length > 0 ? localCandidates : globalCandidates;
+        const isPerplexity = typeof location === 'object' && location.href?.includes?.('perplexity.ai');
+        const matchCandidates = localCandidates.length > 0 ? localCandidates : isPerplexity ? [] : Array.from(document.querySelectorAll(chipSelector));
+        const isInConversation = (node) => {
+          if (!node || !node.closest) return false;
+          return Boolean(node.closest(conversationSelector));
+        };
+        const isExcludedContext = (node) => {
+          if (!node || !node.closest) return false;
+          return Boolean(
+            node.closest(
+              'nav, aside, [data-testid*="sidebar"], [data-testid*="history"], [data-testid*="thread"], [data-testid*="thread-title"]',
+            ),
+          );
+        };
         const serializeChip = (node) => {
           const text = node?.textContent ?? '';
           const aria = node?.getAttribute?.('aria-label') ?? '';
@@ -125,6 +140,7 @@ export async function uploadAttachmentFile(
         let uiMatch = false;
         for (const node of matchCandidates) {
           if (node?.tagName === 'INPUT' && node?.type === 'file') continue;
+          if (isInConversation(node) || isExcludedContext(node)) continue;
           const text = node?.textContent ?? '';
           const aria = node?.getAttribute?.('aria-label') ?? '';
           const title = node?.getAttribute?.('title') ?? '';
@@ -136,9 +152,9 @@ export async function uploadAttachmentFile(
 
         if (!uiMatch) {
           const removeScope = root ?? document;
-          const cardTexts = Array.from(removeScope.querySelectorAll('[aria-label*="Remove"],[aria-label*="remove"]')).map(
-            (btn) => btn?.parentElement?.parentElement?.innerText ?? '',
-          );
+          const cardTexts = Array.from(removeScope.querySelectorAll('[aria-label*="Remove"],[aria-label*="remove"]'))
+            .filter((btn) => !isInConversation(btn) && !isExcludedContext(btn))
+            .map((btn) => btn?.parentElement?.parentElement?.innerText ?? '');
           if (cardTexts.some(matchesExpected)) {
             uiMatch = true;
           }
@@ -255,7 +271,7 @@ export async function uploadAttachmentFile(
           fileCount = collectFileCount(globalFileNodes);
         }
         const hasAttachmentSignal = localCandidates.length > 0 || inputCount > 0 || fileCount > 0 || uploading;
-        if (!uiMatch && rootTextRaw && hasAttachmentSignal && matchesExpected(rootTextRaw)) {
+        if (!uiMatch && !isPerplexity && rootTextRaw && hasAttachmentSignal && matchesExpected(rootTextRaw)) {
           uiMatch = true;
         }
 
@@ -1311,6 +1327,13 @@ export async function waitForAttachmentCompletion(
       }
       return null;
     };
+    const conversationSelectors = ['.prose', '.markdown', '[data-testid*="answer"]', '[data-testid*="response"]', 'article'];
+    const conversationSelector = conversationSelectors.join(',');
+    const isConversationContainer = (node, promptNode) => {
+      if (!node || !node.querySelectorAll) return false;
+      const matches = Array.from(node.querySelectorAll(conversationSelectors.join(',')));
+      return matches.some((el) => promptNode ? !promptNode.contains(el) : true);
+    };
     const attachmentSelectors = [
       'input[type="file"]',
       '[data-testid*="attachment"]',
@@ -1320,36 +1343,32 @@ export async function waitForAttachmentCompletion(
     ];
     const locateComposerRoot = () => {
       const promptNode = findPromptNode();
-      if (promptNode) {
-        const initial =
-          promptNode.closest('[data-testid*="composer"]') ??
-          promptNode.closest('form') ??
-          promptNode.parentElement ??
-          document.body;
-        let current = initial;
-        let fallback = initial;
-        while (current && current !== document.body) {
-          const hasSend = sendSelectors.some((selector) => current.querySelector(selector));
-          if (hasSend) {
-            fallback = current;
-            const hasAttachment = attachmentSelectors.some((selector) => current.querySelector(selector));
-            if (hasAttachment) {
-              return current;
-            }
-          }
-          current = current.parentElement;
-        }
-        return fallback ?? initial;
+      if (!promptNode) {
+        return document.querySelector('form') ?? document.body;
       }
-      return document.querySelector('form') ?? document.body;
+      let current = promptNode;
+      let fallback = promptNode.closest('form') ?? promptNode.parentElement ?? document.body;
+      while (current && current !== document.body) {
+        const hasSend = sendSelectors.some((selector) => current.querySelector(selector));
+        if (hasSend) {
+          const hasConversation = isConversationContainer(current, promptNode);
+          if (!hasConversation) {
+            return current;
+          }
+          if (fallback === document.body) {
+            fallback = current;
+          }
+          const hasAttachment = attachmentSelectors.some((selector) => current.querySelector(selector));
+          if (hasAttachment && !hasConversation) {
+            return current;
+          }
+        }
+        current = current.parentElement;
+      }
+      return fallback;
     };
     const composerRoot = locateComposerRoot();
-    const composerScope = (() => {
-      if (!composerRoot) return document;
-      const parent = composerRoot.parentElement;
-      const parentHasSend = parent && sendSelectors.some((selector) => parent.querySelector(selector));
-      return parentHasSend ? parent : composerRoot;
-    })();
+    const composerScope = composerRoot ?? document;
     let button = null;
     for (const selector of sendSelectors) {
       button = document.querySelector(selector);
@@ -1383,22 +1402,34 @@ export async function waitForAttachmentCompletion(
       'button[aria-label*="Remove"]',
     ];
     const attachedNames = [];
+    const isExcludedContext = (node) => {
+      if (!node || !node.closest) return false;
+      return Boolean(
+        node.closest(
+          'nav, aside, [data-testid*="sidebar"], [data-testid*="history"], [data-testid*="thread"], [data-testid*="thread-title"]',
+        ),
+      );
+    };
     for (const selector of attachmentChipSelectors) {
       for (const node of Array.from(composerScope.querySelectorAll(selector))) {
         if (!node) continue;
+        if (node.closest?.(conversationSelector) || isExcludedContext(node)) continue;
         const text = node.textContent ?? '';
         const aria = node.getAttribute?.('aria-label') ?? '';
         const title = node.getAttribute?.('title') ?? '';
-        const parentText = node.parentElement?.parentElement?.innerText ?? '';
+        const parentText =
+          node.parentElement?.parentElement && !node.parentElement?.parentElement?.closest?.(conversationSelector)
+            ? node.parentElement.parentElement.innerText ?? ''
+            : '';
         for (const value of [text, aria, title, parentText]) {
           const normalized = value?.toLowerCase?.();
           if (normalized) attachedNames.push(normalized);
         }
       }
     }
-    const cardTexts = Array.from(composerScope.querySelectorAll('[aria-label*="Remove"]')).map((btn) =>
-      btn?.parentElement?.parentElement?.innerText?.toLowerCase?.() ?? '',
-    );
+    const cardTexts = Array.from(composerScope.querySelectorAll('[aria-label*="Remove"]'))
+      .filter((btn) => !btn?.closest?.(conversationSelector) && !isExcludedContext(btn))
+      .map((btn) => btn?.parentElement?.parentElement?.innerText?.toLowerCase?.() ?? '');
     attachedNames.push(...cardTexts.filter(Boolean));
 
     const inputNames = [];
@@ -1490,7 +1521,9 @@ export async function waitForAttachmentCompletion(
     if (!fileCount) {
       fileCount = collectFileCount(Array.from(document.querySelectorAll(fileCountSelectors)));
     }
-    const filesAttached = attachedNames.length > 0 || fileCount > 0;
+    const isPerplexity = typeof location === 'object' && location.href?.includes?.('perplexity.ai');
+    const filesAttached =
+      attachedNames.length > 0 || fileCount > 0 || (isPerplexity && inputNames.length > 0);
     return {
       state: button ? (disabled ? 'disabled' : 'ready') : 'missing',
       uploading,

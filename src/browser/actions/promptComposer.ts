@@ -5,6 +5,7 @@ import {
   PROMPT_FALLBACK_SELECTOR,
   SEND_BUTTON_SELECTORS,
   CONVERSATION_TURN_SELECTOR,
+  PERPLEXITY_CONVERSATION_TURN_SELECTOR,
   STOP_BUTTON_SELECTOR,
   ASSISTANT_ROLE_SELECTOR,
 } from '../constants.js';
@@ -346,7 +347,12 @@ async function verifyPromptCommitted(
 	    };
 	    const normalizedPrompt = normalize(${encodedPrompt});
 	    const normalizedPromptPrefix = normalizedPrompt.slice(0, 120);
-	    const CONVERSATION_SELECTOR = ${JSON.stringify(CONVERSATION_TURN_SELECTOR)};
+      const href = typeof location === 'object' && location.href ? location.href : '';
+	    const CONVERSATION_SELECTOR = (() => {
+	      return href.includes('perplexity.ai')
+	        ? ${JSON.stringify(PERPLEXITY_CONVERSATION_TURN_SELECTOR)}
+	        : ${JSON.stringify(CONVERSATION_TURN_SELECTOR)};
+	    })();
 	    const articles = Array.from(document.querySelectorAll(CONVERSATION_SELECTOR));
 	    const normalizedTurns = articles.map((node) => normalize(node?.innerText));
 	    const userMatched =
@@ -360,7 +366,15 @@ async function verifyPromptCommitted(
 	      (lastTurn.includes(normalizedPrompt) ||
 	        (normalizedPromptPrefix.length > 30 && lastTurn.includes(normalizedPromptPrefix)));
 	    const baseline = ${baselineLiteral};
-	    const hasNewTurn = baseline < 0 ? true : normalizedTurns.length > baseline;
+    const isPerplexity = href.includes('perplexity.ai');
+    const hasNewTurn = baseline < 0 ? true : normalizedTurns.length > baseline;
+    const treatAsNewTurn = hasNewTurn || isPerplexity;
+      const threadLinkMatched = (() => {
+        if (!href.includes('perplexity.ai/spaces')) return false;
+        const links = Array.from(document.querySelectorAll('a[href*="/search/"]'));
+        if (links.length === 0) return false;
+        return normalizedPrompt.length > 0 && links.some((link) => normalize(link.textContent).includes(normalizedPrompt));
+      })();
       const stopVisible = Boolean(document.querySelector(${stopSelectorLiteral}));
       const assistantVisible = Boolean(
         document.querySelector(${assistantSelectorLiteral}) ||
@@ -370,13 +384,14 @@ async function verifyPromptCommitted(
       const editorValue = editor?.innerText ?? '';
       const fallbackValue = fallback?.value ?? '';
       const composerCleared = !(String(editorValue).trim() || String(fallbackValue).trim());
-      const href = typeof location === 'object' && location.href ? location.href : '';
       const inConversation = /\\/c\\//.test(href);
-	    return {
+    return {
       userMatched,
       prefixMatched,
       lastMatched,
       hasNewTurn,
+      threadLinkMatched,
+      treatAsNewTurn,
       stopVisible,
       assistantVisible,
       composerCleared,
@@ -396,6 +411,8 @@ async function verifyPromptCommitted(
       prefixMatched?: boolean;
       lastMatched?: boolean;
       hasNewTurn?: boolean;
+      threadLinkMatched?: boolean;
+      treatAsNewTurn?: boolean;
       stopVisible?: boolean;
       assistantVisible?: boolean;
       composerCleared?: boolean;
@@ -403,13 +420,14 @@ async function verifyPromptCommitted(
       turnsCount?: number;
     };
     const turnsCount = (result.value as { turnsCount?: number } | undefined)?.turnsCount;
-    if (info?.hasNewTurn && (info?.lastMatched || info?.userMatched || info?.prefixMatched)) {
+    if (info?.treatAsNewTurn && (info?.lastMatched || info?.userMatched || info?.prefixMatched || info?.threadLinkMatched)) {
       return typeof turnsCount === 'number' && Number.isFinite(turnsCount) ? turnsCount : null;
     }
     const fallbackCommit =
       info?.composerCleared &&
       ((info?.stopVisible ?? false) ||
-        (info?.hasNewTurn && (info?.assistantVisible || info?.inConversation)));
+        (info?.treatAsNewTurn && (info?.assistantVisible || info?.inConversation || info?.threadLinkMatched)) ||
+        info?.threadLinkMatched);
     if (fallbackCommit) {
       return typeof turnsCount === 'number' && Number.isFinite(turnsCount) ? turnsCount : null;
     }

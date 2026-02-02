@@ -20,6 +20,10 @@ import {
   ensureNotBlocked,
   ensureLoggedIn,
   ensurePromptReady,
+  ensurePerplexityMode,
+  ensurePerplexityRecency,
+  ensurePerplexitySources,
+  ensurePerplexityThinking,
   installJavaScriptDialogAutoDismissal,
   ensureModelSelection,
   submitPrompt,
@@ -36,7 +40,12 @@ import { uploadAttachmentViaDataTransfer } from './actions/remoteFileTransfer.js
 import { ensureThinkingTime } from './actions/thinkingTime.js';
 import { estimateTokenCount, withRetries, delay } from './utils.js';
 import { formatElapsed } from '../oracle/format.js';
-import { PERPLEXITY_URL, CONVERSATION_TURN_SELECTOR, DEFAULT_MODEL_STRATEGY } from './constants.js';
+import {
+  PERPLEXITY_URL,
+  CONVERSATION_TURN_SELECTOR,
+  PERPLEXITY_CONVERSATION_TURN_SELECTOR,
+  DEFAULT_MODEL_STRATEGY,
+} from './constants.js';
 import type { LaunchedChrome } from 'chrome-launcher';
 import { BrowserAutomationError } from '../oracle/errors.js';
 import { alignPromptEchoPair, buildPromptEchoMatcher } from './reattachHelpers.js';
@@ -310,6 +319,21 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
     }
     logger(`Prompt textarea ready (initial focus, ${promptText.length.toLocaleString()} chars queued)`);
+    const perplexityMode = config.perplexityMode ?? 'search';
+    await raceWithDisconnect(ensurePerplexityMode(Runtime, perplexityMode, logger));
+    await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
+    if (config.perplexitySources || config.perplexityConnectors) {
+      await raceWithDisconnect(
+        ensurePerplexitySources(Runtime, logger, {
+          sources: config.perplexitySources ?? undefined,
+          connectors: config.perplexityConnectors ?? undefined,
+          skipFailedSources: config.skipFailedSources,
+        }),
+      );
+    }
+    if (config.perplexityRecency) {
+      await raceWithDisconnect(ensurePerplexityRecency(Runtime, config.perplexityRecency, logger));
+    }
     const captureRuntimeSnapshot = async () => {
       try {
         if (client?.Target?.getTargetInfo) {
@@ -380,10 +404,14 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     };
     await captureRuntimeSnapshot();
     const modelStrategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY;
-    if (config.desiredModel && modelStrategy !== 'ignore') {
+    const canSelectModel = perplexityMode === 'search';
+    if (config.desiredModel && modelStrategy !== 'ignore' && canSelectModel) {
       await raceWithDisconnect(
         withRetries(
-          () => ensureModelSelection(Runtime, config.desiredModel as string, logger, modelStrategy),
+          () =>
+            ensureModelSelection(Runtime, config.desiredModel as string, logger, modelStrategy, {
+              fallback: config.modelFallback ?? null,
+            }),
           {
             retries: 2,
             delayMs: 300,
@@ -408,6 +436,8 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       logger(`Prompt textarea ready (after model switch, ${promptText.length.toLocaleString()} chars queued)`);
     } else if (modelStrategy === 'ignore') {
       logger('Model picker: skipped (strategy=ignore)');
+    } else if (!canSelectModel) {
+      logger('Model picker: skipped (Perplexity mode has no model selector)');
     }
     // Handle thinking time selection if specified
     const thinkingTime = config.thinkingTime;
@@ -423,6 +453,9 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           },
         }),
       );
+    }
+    if (typeof config.perplexityThinking === 'boolean') {
+      await raceWithDisconnect(ensurePerplexityThinking(Runtime, config.perplexityThinking, logger));
     }
     const submitOnce = async (prompt: string, submissionAttachments: BrowserAttachment[]) => {
       const baselineSnapshot = await readAssistantSnapshot(Runtime).catch(() => null);
@@ -489,10 +522,13 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         }
       }
       if (attachmentNames.length > 0) {
+        const isPerplexity = (config.url ?? '').includes('perplexity.ai');
         if (attachmentWaitTimedOut) {
           logger('Attachment confirmation timed out; skipping user-turn attachment verification.');
         } else if (inputOnlyAttachments) {
           logger('Attachment UI did not render before send; skipping user-turn attachment verification.');
+        } else if (isPerplexity) {
+          logger('Perplexity: skipping user-turn attachment verification (no attachment UI surfaced).');
         } else {
           const verified = await waitForUserTurnAttachments(Runtime, attachmentNames, 20_000, logger);
           if (!verified) {
@@ -501,6 +537,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           logger('Verified attachments present on sent user message');
         }
       }
+      await maybeOpenPerplexityThread(Page, Runtime, prompt, logger);
       // Reattach needs a Spaces URL; it can update late, so poll in the background.
       scheduleConversationHint('post-submit', config.timeoutMs ?? 120_000);
       return { baselineTurns, baselineAssistantText };
@@ -531,6 +568,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       }
     }
     stopThinkingMonitor = startThinkingStatusMonitor(Runtime, logger, options.verbose ?? false);
+    const minTurnIndex = (config.url ?? '').includes('perplexity.ai') ? undefined : baselineTurns ?? undefined;
     // Helper to normalize text for echo detection (collapse whitespace, lowercase)
     const normalizeForComparison = (text: string): string =>
       text.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -541,7 +579,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           : '';
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
-        const snapshot = await readAssistantSnapshot(Runtime, baselineTurns ?? undefined).catch(() => null);
+        const snapshot = await readAssistantSnapshot(Runtime, minTurnIndex).catch(() => null);
         const text = typeof snapshot?.text === 'string' ? snapshot.text.trim() : '';
         if (text) {
           const normalized = normalizeForComparison(text);
@@ -565,7 +603,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         Page,
         config.timeoutMs,
         logger,
-        baselineTurns ?? undefined,
+        minTurnIndex,
       ),
     );
     // Ensure we store the final conversation URL even if the UI updated late.
@@ -625,7 +663,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     }));
 
     // Final sanity check: ensure we didn't accidentally capture the user prompt instead of the assistant turn.
-    const finalSnapshot = await readAssistantSnapshot(Runtime, baselineTurns ?? undefined).catch(() => null);
+    const finalSnapshot = await readAssistantSnapshot(Runtime, minTurnIndex).catch(() => null);
     const finalText = typeof finalSnapshot?.text === 'string' ? finalSnapshot.text.trim() : '';
     if (finalText && finalText !== promptText.trim()) {
       const trimmedMarkdown = answerMarkdown.trim();
@@ -1037,6 +1075,10 @@ async function runRemoteBrowserMode(
   let connectionClosedUnexpectedly = false;
   let stopThinkingMonitor: (() => void) | null = null;
   let removeDialogHandler: (() => void) | null = null;
+  const devtoolsTraceEnabled =
+    config.debug ||
+    process.env.TRIANGULATOR_DEVTOOLS_TRACE === '1' ||
+    (process.env.TRIANGULATOR_DEVTOOLS_TRACE ?? process.env.ORACLE_DEVTOOLS_TRACE) === '1';
 
   try {
     const connection = await connectToRemoteChrome(host, port, logger, config.url);
@@ -1064,6 +1106,19 @@ async function runRemoteBrowserMode(
     await ensureLoggedIn(Runtime, logger, { remoteSession: true });
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
     logger(`Prompt textarea ready (initial focus, ${promptText.length.toLocaleString()} chars queued)`);
+    const perplexityMode = config.perplexityMode ?? 'search';
+    await ensurePerplexityMode(Runtime, perplexityMode, logger);
+    await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
+    if (config.perplexitySources || config.perplexityConnectors) {
+      await ensurePerplexitySources(Runtime, logger, {
+        sources: config.perplexitySources ?? undefined,
+        connectors: config.perplexityConnectors ?? undefined,
+        skipFailedSources: config.skipFailedSources,
+      });
+    }
+    if (config.perplexityRecency) {
+      await ensurePerplexityRecency(Runtime, config.perplexityRecency, logger);
+    }
     try {
       const { result } = await Runtime.evaluate({
         expression: 'location.href',
@@ -1078,9 +1133,13 @@ async function runRemoteBrowserMode(
     }
 
     const modelStrategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY;
-    if (config.desiredModel && modelStrategy !== 'ignore') {
+    const canSelectModel = perplexityMode === 'search';
+    if (config.desiredModel && modelStrategy !== 'ignore' && canSelectModel) {
       await withRetries(
-        () => ensureModelSelection(Runtime, config.desiredModel as string, logger, modelStrategy),
+        () =>
+          ensureModelSelection(Runtime, config.desiredModel as string, logger, modelStrategy, {
+            fallback: config.modelFallback ?? null,
+          }),
         {
           retries: 2,
           delayMs: 300,
@@ -1095,6 +1154,8 @@ async function runRemoteBrowserMode(
       logger(`Prompt textarea ready (after model switch, ${promptText.length.toLocaleString()} chars queued)`);
     } else if (modelStrategy === 'ignore') {
       logger('Model picker: skipped (strategy=ignore)');
+    } else if (!canSelectModel) {
+      logger('Model picker: skipped (Perplexity mode has no model selector)');
     }
     // Handle thinking time selection if specified
     const thinkingTime = config.thinkingTime;
@@ -1108,6 +1169,9 @@ async function runRemoteBrowserMode(
           }
         },
       });
+    }
+    if (typeof config.perplexityThinking === 'boolean') {
+      await ensurePerplexityThinking(Runtime, config.perplexityThinking, logger);
     }
 
     const submitOnce = async (prompt: string, submissionAttachments: BrowserAttachment[]) => {
@@ -1208,7 +1272,7 @@ async function runRemoteBrowserMode(
       Page,
       config.timeoutMs,
       logger,
-      baselineTurns ?? undefined,
+      minTurnIndex,
     );
     const baselineNormalized = baselineAssistantText ? normalizeForComparison(baselineAssistantText) : '';
     if (baselineNormalized) {
@@ -1263,7 +1327,7 @@ async function runRemoteBrowserMode(
     }));
 
     // Final sanity check: ensure we didn't accidentally capture the user prompt instead of the assistant turn.
-    const finalSnapshot = await readAssistantSnapshot(Runtime, baselineTurns ?? undefined).catch(() => null);
+    const finalSnapshot = await readAssistantSnapshot(Runtime, minTurnIndex).catch(() => null);
     const finalText = typeof finalSnapshot?.text === 'string' ? finalSnapshot.text.trim() : '';
     if (
       finalText &&
@@ -1460,16 +1524,56 @@ async function readConversationUrl(Runtime: ChromeClient['Runtime']): Promise<st
   }
 }
 
+async function maybeOpenPerplexityThread(
+  Page: ChromeClient['Page'],
+  Runtime: ChromeClient['Runtime'],
+  prompt: string,
+  logger: BrowserLogger,
+): Promise<void> {
+  const normalizedPrompt = prompt.trim().toLowerCase();
+  const attempts = 40;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const { result } = await Runtime.evaluate({
+      expression: `(() => {
+        const href = typeof location === 'object' && location.href ? location.href : '';
+        if (!href.includes('perplexity.ai/spaces')) return null;
+        if (href.includes('/search/')) return null;
+        const promptText = ${JSON.stringify(normalizedPrompt)};
+        const links = Array.from(document.querySelectorAll('a[href*="/search/"]'));
+        if (links.length === 0) return null;
+        const matched = promptText
+          ? links.find((link) => (link.textContent || '').toLowerCase().includes(promptText))
+          : null;
+        const target = matched || links[0];
+        return target?.href || null;
+      })()`,
+      returnByValue: true,
+    });
+    const targetUrl = typeof result?.value === 'string' ? result.value : null;
+    if (targetUrl) {
+      logger(`Opening Perplexity thread: ${targetUrl}`);
+      await Page.navigate({ url: targetUrl });
+      return;
+    }
+    await delay(250);
+  }
+}
+
 async function readConversationTurnCount(
   Runtime: ChromeClient['Runtime'],
   logger?: BrowserLogger,
 ): Promise<number | null> {
   const selectorLiteral = JSON.stringify(CONVERSATION_TURN_SELECTOR);
+  const perplexityLiteral = JSON.stringify(PERPLEXITY_CONVERSATION_TURN_SELECTOR);
   const attempts = 4;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const { result } = await Runtime.evaluate({
-        expression: `document.querySelectorAll(${selectorLiteral}).length`,
+        expression: `(() => {
+          const href = typeof location === 'object' && location.href ? location.href : '';
+          const selector = href.includes('perplexity.ai') ? ${perplexityLiteral} : ${selectorLiteral};
+          return document.querySelectorAll(selector).length;
+        })()`,
         returnByValue: true,
       });
       const raw = typeof result?.value === 'number' ? result.value : Number(result?.value);

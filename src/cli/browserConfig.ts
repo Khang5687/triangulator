@@ -9,6 +9,12 @@ import {
   normalizePerplexityUrl,
   parseDuration,
 } from '../browserMode.js';
+import {
+  normalizePerplexityMode,
+  normalizePerplexityRecency,
+  normalizePerplexitySources,
+  normalizePerplexityConnectors,
+} from '../browser/perplexityConfig.js';
 import { normalizeBrowserModelStrategy } from '../browser/modelStrategy.js';
 import type { BrowserModelStrategy } from '../browser/types.js';
 import type { CookieParam } from '../browser/types.js';
@@ -58,6 +64,13 @@ export interface BrowserFlagOptions {
   browserModelLabel?: string;
   browserModelStrategy?: BrowserModelStrategy;
   browserAllowCookieErrors?: boolean;
+  perplexityMode?: string;
+  perplexityThinking?: boolean;
+  perplexityRecency?: string;
+  perplexitySources?: string;
+  perplexityConnectors?: string;
+  skipFailedSources?: boolean;
+  modelFallback?: string;
   remoteChrome?: string;
   browserPort?: number;
   browserDebugPort?: number;
@@ -125,6 +138,12 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
       ? desiredModelOverride
       : mapModelToBrowserLabel(options.model);
 
+  const perplexityMode = normalizePerplexityMode(options.perplexityMode) ?? undefined;
+  const perplexityRecency = normalizePerplexityRecency(options.perplexityRecency) ?? undefined;
+  const perplexitySources = normalizePerplexitySources(options.perplexitySources ?? undefined);
+  const perplexityConnectors = normalizePerplexityConnectors(options.perplexityConnectors ?? undefined);
+  const modelFallback = options.modelFallback?.trim?.() || undefined;
+
   return {
     chromeProfile: options.browserChromeProfile ?? DEFAULT_CHROME_PROFILE,
     chromePath: options.browserChromePath ?? null,
@@ -152,6 +171,13 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
     allowCookieErrors: options.browserAllowCookieErrors ?? true,
     remoteChrome,
     thinkingTime: options.browserThinkingTime,
+    perplexityMode,
+    perplexityThinking: options.perplexityThinking,
+    perplexityRecency,
+    perplexitySources,
+    perplexityConnectors,
+    skipFailedSources: options.skipFailedSources,
+    modelFallback,
   };
 }
 

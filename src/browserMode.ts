@@ -12,3 +12,6 @@ export {
   parseDuration,
   normalizePerplexityUrl,
 } from './browser/index.js';
+
+// Legacy alias for older tests/tools expecting CHATGPT_URL.
+export { PERPLEXITY_URL as CHATGPT_URL } from './browser/index.js';

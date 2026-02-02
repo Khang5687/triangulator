@@ -6,6 +6,7 @@ export const DEFAULT_MODEL_STRATEGY: BrowserModelStrategy = 'select';
 export const COOKIE_URLS = ['https://www.perplexity.ai', 'https://perplexity.ai'];
 
 export const INPUT_SELECTORS = [
+  '#ask-input[contenteditable="true"]',
   'textarea[placeholder*="Ask"]',
   'textarea[placeholder*="ask"]',
   'textarea[aria-label*="Ask"]',
@@ -23,14 +24,18 @@ export const ANSWER_SELECTORS = [
   'main [data-testid*="answer"]',
   'main .prose',
   'main .markdown',
+  '.prose',
+  '.markdown',
   'article',
 ];
 
 export const CONVERSATION_TURN_SELECTOR =
   'article[data-testid*="answer"], div[data-testid*="answer"], section[data-testid*="answer"], ' +
   'article[data-testid*="message"], div[data-testid*="message"], section[data-testid*="message"], ' +
-  'article, section';
-export const ASSISTANT_ROLE_SELECTOR = '[data-testid*="answer"], [data-testid*="response"], main .prose, main .markdown';
+  'article, section, main h1, main .prose, main .markdown';
+export const PERPLEXITY_CONVERSATION_TURN_SELECTOR =
+  '[data-testid*="answer"], [data-testid*="response"], .prose, .markdown';
+export const ASSISTANT_ROLE_SELECTOR = '[data-testid*="answer"], [data-testid*="response"], .prose, .markdown';
 export const CLOUDFLARE_SCRIPT_SELECTOR = 'script[src*="/challenge-platform/"]';
 export const CLOUDFLARE_TITLE = 'just a moment';
 export const PROMPT_PRIMARY_SELECTOR = '[contenteditable="true"]';
@@ -68,10 +73,28 @@ export const SEND_BUTTON_SELECTORS = [
   'form button[type="submit"]',
   'button[type="submit"][data-testid*="send"]',
   'button[aria-label*="Send"]',
+  'button[aria-label*="Ask"]',
+  'button[aria-label="Submit"]',
+  'button[class*="border-2"][class*="!border-inverse"]',
+  'button.bg-subtle.text-foreground.border-2',
 ];
 export const SEND_BUTTON_SELECTOR = SEND_BUTTON_SELECTORS[0];
-export const MODEL_BUTTON_SELECTOR = '[data-testid*="model"], [aria-label*="Model"]';
-export const COPY_BUTTON_SELECTOR = 'button[aria-label*="Copy"], button[data-testid*="copy"]';
+export const MODEL_BUTTON_SELECTOR = '[data-testid*="model"], [aria-label*="Model"], button[aria-label="Choose a model"]';
+export const COPY_BUTTON_SELECTOR =
+  'button[aria-label*="Copy"], button[data-testid*="copy"], button[data-testid="copy-turn-action-button"]';
 // Action buttons that only appear once a turn has finished rendering.
 export const FINISHED_ACTIONS_SELECTOR =
-  'button[aria-label*="Copy"], button[aria-label*="Share"], button[data-testid*="copy"], button[data-testid*="share"]';
+  'button[aria-label*="Copy"], button[aria-label*="Share"], button[data-testid*="copy"], button[data-testid*="share"], ' +
+  'button[data-testid="copy-turn-action-button"]';
+
+export const PERPLEXITY_MODE_BUTTONS = {
+  search: 'button[role="radio"][aria-label="Search"]',
+  deep_research: 'button[role="radio"][aria-label="Deep research"]',
+  create_files: 'button[role="radio"][aria-label="Create files and apps"]',
+} as const;
+export const PERPLEXITY_MODEL_BUTTON_SELECTOR =
+  'button[aria-label="Choose a model"], ' +
+  'button[aria-label*="GPT"], button[aria-label*="Sonar"], button[aria-label*="Gemini"], ' +
+  'button[aria-label*="Claude"], button[aria-label*="Grok"], button[aria-label*="Kimi"]';
+export const PERPLEXITY_RECENCY_BUTTON_SELECTOR = 'button[aria-label="Set recency for web search"]';
+export const PERPLEXITY_SOURCES_BUTTON_SELECTOR = 'button[aria-label="Sources"]';

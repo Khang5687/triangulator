@@ -3,7 +3,7 @@
 ## 0) Purpose
 Adapt Triangulator to Perplexity-only browser automation and Spaces. Remove ChatGPT assumptions, rename oracle -> triangulator, and migrate config home to `~/.triangulator/config.json` (auto-copy from `~/.oracle`). Keep structure close to upstream Oracle to minimize merge conflicts.
 
-## 0.1) Status update (2026-02-01)
+## 0.1) Status update (2026-02-02)
 - Completed: user-facing Triangulator renames in CLI/docs/tests; Perplexity URL defaults + Spaces wording; config auto-copy logic to `~/.triangulator`; notifier rename; `chatgptUrl` retained only as hidden legacy alias.
 - In-progress: Perplexity-specific selectors for composer/attachments/response capture (needs discovery).
 - Remaining: one-time local copy `~/.oracle/config.json` -> `~/.triangulator/config.json`; run Perplexity smoke tests; finalize attachment selectors.
@@ -26,6 +26,10 @@ Adapt Triangulator to Perplexity-only browser automation and Spaces. Remove Chat
 - Perplexity only (no chatgpt.com support in Triangulator).
 - Spaces URLs supported (e.g. `https://www.perplexity.ai/spaces/...`).
 - Attachments supported on Perplexity.
+- Support Perplexity Space modes: Search / Deep research / Create files and apps (Labs).
+- Search-only model selector + optional thinking toggle (ignore when unsupported/forced).
+- Sources selection (Web, Academic, Social + connectors) with skip/abort behavior.
+- Recency selector (default: last year) with config + CLI flag.
 - Rename all user-facing Oracle references to Triangulator.
 - Migrate config to `~/.triangulator/config.json` and use it everywhere (prod + tests).
 - Keep model logic unchanged for now.
@@ -34,6 +38,7 @@ Adapt Triangulator to Perplexity-only browser automation and Spaces. Remove Chat
 ## 3) Non-goals
 - Multi-provider support or ChatGPT compatibility in Triangulator.
 - Changes to model selection logic (future work).
+- Connect Files (Perplexity connectors for file sources) support.
 - Large refactors that diverge heavily from upstream.
 
 ## 4) Immediate to-dos (this round)
@@ -53,6 +58,10 @@ Adapt Triangulator to Perplexity-only browser automation and Spaces. Remove Chat
 
 ### D) CLI options inventory
 - [DONE] Options list compiled from `bin/triangulator-cli.ts` (see chat response).
+
+### E) Perplexity mode/settings support
+- [PENDING] Config + CLI flags for mode, recency, sources, connectors, thinking, model fallback.
+- [PENDING] Help text for all new flags (with defaults).
 
 ## 5) Perplexity discovery checklist (fill after testing)
 ### 5.1 Target site basics
@@ -74,16 +83,16 @@ Adapt Triangulator to Perplexity-only browser automation and Spaces. Remove Chat
 - Extra auth domains (SSO, etc): [TODO]
 
 ### 5.4 Composer input
-- Input selectors (ordered): [TODO]
-- Editor type (textarea or contenteditable): [TODO]
-- Send button selectors: [TODO]
+- Input selectors (ordered): `#ask-input[contenteditable="true"]`, `[contenteditable="true"][role="textbox"]`
+- Editor type (textarea or contenteditable): contenteditable div (`#ask-input`)
+- Send button selectors: `button.bg-subtle.text-foreground.border-2.!border-inverse` (blue submit button; no aria-label)
 - Disabled state signals: [TODO]
 - Commit signals (prove prompt accepted): [TODO]
 
 ### 5.5 Attachments (required)
-- Upload supported: [TODO]
-- File input selectors: [TODO]
-- Open-attachment action: [TODO]
+- Upload supported: yes (file input present)
+- File input selectors: `input[type="file"][data-testid="file-upload-input"]` (multiple), plus hidden `input[type="file"][multiple]` with accept list
+- Open-attachment action: `button[aria-label="Attach files"]`
 - Upload-in-progress signals: [TODO]
 - Attachment chip selectors: [TODO]
 - Completion signals: [TODO]
@@ -99,6 +108,30 @@ Adapt Triangulator to Perplexity-only browser automation and Spaces. Remove Chat
 - Stable space key extraction: [TODO]
 - Build URL from key: [TODO]
 - Sidebar or history navigation needed: [TODO]
+
+### 5.8 Mode selector (Spaces UI)
+- Mode control location (Search / Deep research / Create files and apps): buttons above composer
+- Selector(s) for each mode tab/button: `button[role="radio"][aria-label="Search"]`, `button[role="radio"][aria-label="Deep research"]`, `button[role="radio"][aria-label="Create files and apps"]`
+- Active-state indicator: `aria-checked="true"` / `data-state="checked"`
+- Availability/disabled states (plan limits): [TODO]
+
+### 5.9 Search model + thinking toggle
+- Model picker location (Search only): `button[aria-label="Choose a model"]`
+- Model list item selectors + value mapping: `div[role="menuitem"]` inside `div[role="menu"]` (labels: Best, Sonar, Gemini 3 Flash/Pro, GPT-5.2, Claude Sonnet 4.5, Claude Opus 4.5 max, Grok 4.1, Kimi K2.5)
+- Thinking toggle selector + on/off state: not found yet (likely model-dependent)
+- Models with forced/unsupported thinking: [TODO]
+- Plan-gated models behavior (e.g., Opus 4.5): [TODO]
+
+### 5.10 Sources + connectors
+- Sources menu selector (Web / Academic / Social): `button[aria-label="Sources"]` (menu not observed via DOM click yet)
+- Connectors list container selector: [TODO]
+- Connector toggle selector + disabled state indicator: [TODO]
+- "No access / connect required" indicator: [TODO]
+- Save/apply button selector (if any): [TODO]
+
+### 5.11 Recency selector
+- Recency menu selector: `button[aria-label="Set recency for web search"]`
+- Supported values + selectors (default: last year): `div[role="menuitem"]` with labels All Time / Today / Last Week / Last Month / Last Year
 
 ## 6) Implementation plan (once checklist is filled)
 ### Phase A: Config + naming migration
@@ -116,15 +149,22 @@ Adapt Triangulator to Perplexity-only browser automation and Spaces. Remove Chat
 - Replace selectors for prompt input, send button, attachments, answer capture.
 - Implement Perplexity auth probe (DOM or endpoint).
 - Update reattach logic for Spaces URLs.
+- Add mode selection (Search / Deep research / Create files and apps).
+- Add search-only model picker + thinking toggle.
+- Add sources + connectors toggles with skip/abort behavior.
+- Add recency selector with default fallback.
 
 ### Phase D: Docs + tests
 - Update docs to Perplexity + Triangulator naming + new config path.
 - Update tests that assert oracle strings or paths.
 - Publish CLI options inventory.
+- Document new flags + config keys (mode, thinking, sources, connectors, recency, model_fallback, skip_failed_sources).
 
 ## 7) Testing plan
 - Config migration test (auto-copy).
 - Browser smoke: Perplexity Spaces prompt + attachments + response capture.
+- Browser smoke: mode switch, model selection (Search), thinking toggle (where supported).
+- Browser smoke: sources/connectors + recency.
 - No ChatGPT browser tests in Triangulator.
 
 ## 8) Acceptance criteria
@@ -132,3 +172,6 @@ Adapt Triangulator to Perplexity-only browser automation and Spaces. Remove Chat
 - No chatgpt.com references remain in user-facing output/docs.
 - Config path is `~/.triangulator/config.json` and auto-copies from `~/.oracle` on first run.
 - Model logic unchanged.
+- Modes selectable (Search/Deep research/Create files and apps); Search-only model selection works.
+- Thinking toggle is honored when supported, ignored when forced/unsupported.
+- Sources + recency configuration applied; connectors skip/abort behavior respects `skip_failed_sources`.

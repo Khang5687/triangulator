@@ -29,6 +29,7 @@ import {
   parseFloatOption,
   parseIntOption,
   parseSearchOption,
+  parseBooleanOption,
   usesDefaultStatusFilters,
   resolvePreviewMode,
   normalizeModelOption,
@@ -133,6 +134,13 @@ interface CliOptions extends OptionValues {
   browserAttachments?: string;
   browserInlineFiles?: boolean;
   browserBundleFiles?: boolean;
+  perplexityMode?: string;
+  perplexityThinking?: boolean;
+  perplexityRecency?: string;
+  perplexitySources?: string;
+  perplexityConnectors?: string;
+  skipFailedSources?: boolean;
+  modelFallback?: string;
   remoteChrome?: string;
   browserPort?: number;
   browserDebugPort?: number;
@@ -423,6 +431,43 @@ program
       'Browser model picker strategy: select (default) switches to the requested model, current keeps the active model, ignore skips the picker entirely (Perplexity ignores this).',
     ).choices(['select', 'current', 'ignore']),
   )
+  .addOption(
+    new Option(
+      '--perplexity-mode <mode>',
+      'Perplexity Space mode: search, deep_research, or create_files (default: search).',
+    ).choices(['search', 'deep_research', 'create_files']),
+  )
+  .addOption(
+    new Option(
+      '--perplexity-thinking <on|off>',
+      'Toggle Perplexity model thinking when supported (on/off).',
+    ).argParser(parseBooleanOption),
+  )
+  .addOption(
+    new Option(
+      '--perplexity-recency <range>',
+      'Perplexity search recency: all, day, week, month, or year (default: year).',
+    ).choices(['all', 'day', 'week', 'month', 'year']),
+  )
+  .addOption(
+    new Option(
+      '--perplexity-sources <list>',
+      'Comma-separated Perplexity sources to enable (web, academic, social).',
+    ),
+  )
+  .addOption(
+    new Option(
+      '--perplexity-connectors <list>',
+      'Comma-separated Perplexity connectors to enable (e.g., github, asana).',
+    ),
+  )
+  .addOption(
+    new Option(
+      '--[no-]skip-failed-sources',
+      'Skip unavailable Perplexity sources/connectors (default true; use --no-skip-failed-sources to abort).',
+    ),
+  )
+  .addOption(new Option('--model-fallback <model>', 'Fallback model when requested model is unavailable.'))
   .addOption(
     new Option('--browser-thinking-time <level>', 'Thinking time intensity for Thinking/Pro models: light, standard, extended, heavy.')
       .choices(['light', 'standard', 'extended', 'heavy'])
@@ -1381,6 +1426,13 @@ function printDebugHelp(cliName: string): void {
   console.log(chalk.bold('Browser Options'));
   printDebugOptionGroup([
     ['--perplexity-url <url>', 'Override the Perplexity Spaces URL (workspace targets).'],
+    ['--perplexity-mode <mode>', 'Perplexity mode: search, deep_research, create_files.'],
+    ['--perplexity-thinking <on|off>', 'Toggle model thinking when supported.'],
+    ['--perplexity-recency <range>', 'Perplexity recency: all, day, week, month, year.'],
+    ['--perplexity-sources <list>', 'Comma-separated sources: web, academic, social.'],
+    ['--perplexity-connectors <list>', 'Comma-separated connectors (e.g., github, asana).'],
+    ['--[no-]skip-failed-sources', 'Skip or abort when sources/connectors are unavailable.'],
+    ['--model-fallback <model>', 'Fallback model when requested model is unavailable.'],
     ['--browser-chrome-profile <name>', 'Reuse cookies from a specific Chrome profile.'],
     ['--browser-chrome-path <path>', 'Point to a custom Chrome/Chromium binary.'],
     ['--browser-cookie-path <path>', 'Use a specific Chrome/Chromium cookie store file.'],
