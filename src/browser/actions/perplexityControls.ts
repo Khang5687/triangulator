@@ -20,7 +20,7 @@ export async function ensurePerplexityMode(
   logger: BrowserLogger,
 ) {
   const deadline = Date.now() + 7000;
-  let lastDebug: { url?: string; labels?: string[] } | null = null;
+  let lastDebug: { url?: string; labels?: string[]; active?: string | null } | null = null;
   while (Date.now() < deadline) {
     const outcome = await Runtime.evaluate({
       expression: buildModeSelectionExpression(mode),
@@ -28,11 +28,12 @@ export async function ensurePerplexityMode(
       returnByValue: true,
     });
     const result = outcome.result?.value as
-      | { status: 'selected' | 'already-selected'; label: string }
-      | { status: 'missing'; debug?: { url?: string; labels?: string[] } };
+      | { status: 'selected' | 'already-selected'; label: string; activeLabel?: string | null }
+      | { status: 'missing'; debug?: { url?: string; labels?: string[]; active?: string | null } };
     if (result && result.status !== 'missing') {
       const label = result.label ?? mode;
-      logger(`Perplexity mode: ${label}`);
+      const activeLabel = result.activeLabel ?? label;
+      logger(`Perplexity mode: ${label}${activeLabel && activeLabel !== label ? ` (active: ${activeLabel})` : ''}`);
       return;
     }
     if (result?.debug) {
@@ -43,7 +44,7 @@ export async function ensurePerplexityMode(
   if (lastDebug?.labels?.length) {
     logger(
       `Perplexity mode controls missing on ${lastDebug.url ?? 'unknown page'}; ` +
-        `candidates: ${lastDebug.labels.join(' | ')}`,
+        `active=${lastDebug.active ?? 'unknown'}; candidates: ${lastDebug.labels.join(' | ')}`,
     );
   }
   await logDomFailure(Runtime, logger, 'perplexity-mode');
@@ -170,6 +171,20 @@ function buildModeSelectionExpression(mode: PerplexityMode): string {
         (node.textContent || '').trim()
       );
     };
+    const isChecked = (node) => {
+      if (!node) return false;
+      return (
+        node.getAttribute('aria-checked') === 'true' ||
+        node.getAttribute('aria-selected') === 'true' ||
+        node.getAttribute('aria-pressed') === 'true' ||
+        node.getAttribute('data-state') === 'checked'
+      );
+    };
+    const currentActiveLabel = () => {
+      const candidates = Array.from(document.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"]'));
+      const active = candidates.find((node) => isChecked(node));
+      return active ? getLabel(active) : null;
+    };
     const desired = wantedLabels[${modeLiteral}] || [${modeLiteral}];
     const findButton = () => {
       const direct = target ? document.querySelector(target) : null;
@@ -200,17 +215,26 @@ function buildModeSelectionExpression(mode: PerplexityMode): string {
         .map((node) => normalize(getLabel(node)))
         .filter(Boolean)
         .slice(0, 12);
-      return { status: 'missing', debug: { url: location.href, labels } };
+      return { status: 'missing', debug: { url: location.href, labels, active: currentActiveLabel() } };
     }
     const label = getLabel(button) || ${modeLiteral};
-    const checked =
-      button.getAttribute('aria-checked') === 'true' ||
-      button.getAttribute('aria-selected') === 'true' ||
-      button.getAttribute('aria-pressed') === 'true' ||
-      button.getAttribute('data-state') === 'checked';
-    if (checked) return { status: 'already-selected', label };
+    const checked = isChecked(button);
+    if (checked) return { status: 'already-selected', label, activeLabel: currentActiveLabel() || label };
+    if (typeof button.scrollIntoView === 'function') {
+      button.scrollIntoView({ block: 'center', inline: 'center' });
+    }
     dispatchClickSequence(button);
-    return { status: 'selected', label };
+    if (typeof button.click === 'function') {
+      button.click();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const after = currentActiveLabel();
+    const normalizedAfter = normalize(after || '');
+    const matched = desired.some((entry) => normalizedAfter.includes(entry));
+    if (!matched) {
+      return { status: 'missing', debug: { url: location.href, labels: desired, active: after } };
+    }
+    return { status: 'selected', label, activeLabel: after };
   })()`;
 }
 
