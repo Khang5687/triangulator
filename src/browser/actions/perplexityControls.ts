@@ -189,13 +189,35 @@ function buildModeSelectionExpression(mode: PerplexityMode): string {
     const findButton = () => {
       const direct = target ? document.querySelector(target) : null;
       if (direct) return direct;
-      const candidates = Array.from(document.querySelectorAll('button, [role="radio"], [role="tab"]'));
-      return (
-        candidates.find((node) => {
-          const label = normalize(getLabel(node));
-          return desired.some((entry) => label.includes(entry));
-        }) || null
+      const radioCandidates = Array.from(
+        document.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"]'),
       );
+      const labelMatches = (node) => {
+        const label = normalize(getLabel(node));
+        return desired.some((entry) => label.includes(entry));
+      };
+      const preferred = radioCandidates.filter((node) => (node.className || '').includes('segmented-control'));
+      const preferredMatch = preferred.find(labelMatches);
+      if (preferredMatch) return preferredMatch;
+      const modeSet = new Set(['search', 'deep research', 'create files and apps']);
+      const grouped = new Map();
+      for (const node of radioCandidates) {
+        const parent = node.closest('div') || node.parentElement || null;
+        if (!parent) continue;
+        const label = normalize(getLabel(node));
+        if (!modeSet.has(label)) continue;
+        const key = parent;
+        if (!grouped.has(key)) grouped.set(key, new Set());
+        grouped.get(key).add(label);
+      }
+      for (const [parent, labels] of grouped.entries()) {
+        if (labels.size >= 2) {
+          const scoped = Array.from(parent.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"]'));
+          const scopedMatch = scoped.find(labelMatches);
+          if (scopedMatch) return scopedMatch;
+        }
+      }
+      return radioCandidates.find(labelMatches) || null;
     };
     let button = findButton();
     if (!button) {
