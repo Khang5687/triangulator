@@ -267,7 +267,7 @@ program
   .option('-s, --slug <words>', 'Custom session slug (3-5 words).')
   .option(
     '-m, --model <model>',
-    'Model to target (gpt-5.2-pro default; also supports gpt-5.1-pro alias). Also gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus, or browser labels like "5.2 Thinking" (ignored for Perplexity browser runs).',
+    'Model to target for API runs (gpt-5.2-pro default; also supports gpt-5.1-pro alias). Also gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus. Browser (Perplexity) maps labels to Best, Sonar, Gemini 3 Flash/Pro, GPT-5.2, Claude Sonnet/Opus 4.5, Grok 4.1, Kimi K2.5; unknown labels fall back to Best.',
     normalizeModelOption,
   )
   .addOption(
@@ -281,7 +281,7 @@ program
   .addOption(
     new Option(
       '-e, --engine <mode>',
-      'Execution engine (api | browser). Browser engine: GPT models automate Perplexity; Gemini models use a cookie-based client for gemini.google.com. If omitted, triangulator picks api when OPENAI_API_KEY is set, otherwise browser.',
+      'Execution engine (api | browser). Browser engine automates Perplexity Spaces (search/deep_research/create_files); Gemini models use a cookie-based client for gemini.google.com. If omitted, triangulator picks api when OPENAI_API_KEY is set, otherwise browser.',
     ).choices(['api', 'browser'])
   )
   .addOption(
@@ -386,7 +386,7 @@ program
   .addOption(
     new Option(
       '--perplexity-url <url>',
-      `Override the Perplexity Spaces URL (e.g., https://www.perplexity.ai/spaces/...; default ${PERPLEXITY_URL}).`,
+      `Override the Perplexity Space or Space thread URL (e.g., https://www.perplexity.ai/spaces/...; default ${PERPLEXITY_URL}).`,
     ),
   )
   .addOption(new Option('--chatgpt-url <url>', 'Legacy alias for --perplexity-url.').hideHelp())
@@ -428,37 +428,37 @@ program
   .addOption(
     new Option(
       '--browser-model-strategy <mode>',
-      'Browser model picker strategy: select (default) switches to the requested model, current keeps the active model, ignore skips the picker entirely (Perplexity ignores this).',
+      'Browser model picker strategy: select (default) switches to the requested model, current keeps the active model, ignore skips the picker entirely (Perplexity: only applies in search mode).',
     ).choices(['select', 'current', 'ignore']),
   )
   .addOption(
     new Option(
       '--perplexity-mode <mode>',
-      'Perplexity Space mode: search, deep_research, or create_files (default: search).',
+      'Perplexity Space mode: search, deep_research, or create_files (default: search; model picker/recency/sources apply only to search).',
     ).choices(['search', 'deep_research', 'create_files']),
   )
   .addOption(
     new Option(
       '--perplexity-thinking <on|off>',
-      'Toggle Perplexity model thinking when supported (on/off).',
+      'Toggle Perplexity model thinking when supported (on/off; ignored if the model forces/omits it).',
     ).argParser(parseBooleanOption),
   )
   .addOption(
     new Option(
       '--perplexity-recency <range>',
-      'Perplexity search recency: all, day, week, month, or year (default: year).',
+      'Perplexity search recency: all, day, week, month, or year (default: year; search mode only).',
     ).choices(['all', 'day', 'week', 'month', 'year']),
   )
   .addOption(
     new Option(
       '--perplexity-sources <list>',
-      'Comma-separated Perplexity sources to enable (web, academic, social).',
+      'Comma-separated Perplexity sources to enable (web, academic, social; search mode only).',
     ),
   )
   .addOption(
     new Option(
       '--perplexity-connectors <list>',
-      'Comma-separated Perplexity connectors to enable (e.g., github, asana).',
+      'Comma-separated Perplexity connectors to enable (e.g., github, asana; requires connectors to be enabled in Perplexity).',
     ),
   )
   .addOption(
@@ -467,7 +467,12 @@ program
       'Skip unavailable Perplexity sources/connectors (default true; use --no-skip-failed-sources to abort).',
     ),
   )
-  .addOption(new Option('--model-fallback <model>', 'Fallback model when requested model is unavailable.'))
+  .addOption(
+    new Option(
+      '--model-fallback <model>',
+      'Fallback model when requested model is unavailable (Perplexity browser runs use Perplexity labels).',
+    ),
+  )
   .addOption(
     new Option('--browser-thinking-time <level>', 'Thinking time intensity for Thinking/Pro models: light, standard, extended, heavy.')
       .choices(['light', 'standard', 'extended', 'heavy'])
@@ -537,8 +542,8 @@ Examples:
   triangulator --prompt "Summarize the risk register" --file docs/risk-register.md docs/risk-matrix.md
 
   # Browser run (no API key) + globbed TypeScript sources, excluding tests
-  triangulator --engine browser --prompt "Review the TS data layer" \\
-    --file "src/**/*.ts" --file "!src/**/*.test.ts"
+  triangulator --engine browser --perplexity-url "https://www.perplexity.ai/spaces/<space>" --perplexity-mode search \\
+    --perplexity-thinking on --prompt "Review the TS data layer" --file "src/**/*.ts" --file "!src/**/*.test.ts"
 
   # Build, print, and copy a markdown bundle (semi-manual)
   triangulator --render --copy -p "Review the TS data layer" --file "src/**/*.ts" --file "!src/**/*.test.ts"
@@ -1425,14 +1430,14 @@ function printDebugHelp(cliName: string): void {
   console.log('');
   console.log(chalk.bold('Browser Options'));
   printDebugOptionGroup([
-    ['--perplexity-url <url>', 'Override the Perplexity Spaces URL (workspace targets).'],
-    ['--perplexity-mode <mode>', 'Perplexity mode: search, deep_research, create_files.'],
-    ['--perplexity-thinking <on|off>', 'Toggle model thinking when supported.'],
-    ['--perplexity-recency <range>', 'Perplexity recency: all, day, week, month, year.'],
-    ['--perplexity-sources <list>', 'Comma-separated sources: web, academic, social.'],
-    ['--perplexity-connectors <list>', 'Comma-separated connectors (e.g., github, asana).'],
+    ['--perplexity-url <url>', 'Override the Perplexity Space or Space thread URL.'],
+    ['--perplexity-mode <mode>', 'Perplexity mode: search, deep_research, create_files (model picker applies to search).'],
+    ['--perplexity-thinking <on|off>', 'Toggle model thinking when supported (ignored if forced).'],
+    ['--perplexity-recency <range>', 'Perplexity recency: all, day, week, month, year (search only).'],
+    ['--perplexity-sources <list>', 'Comma-separated sources: web, academic, social (search only).'],
+    ['--perplexity-connectors <list>', 'Comma-separated connectors (e.g., github, asana; must be enabled in Perplexity).'],
     ['--[no-]skip-failed-sources', 'Skip or abort when sources/connectors are unavailable.'],
-    ['--model-fallback <model>', 'Fallback model when requested model is unavailable.'],
+    ['--model-fallback <model>', 'Fallback model when requested model is unavailable (Perplexity labels).'],
     ['--browser-chrome-profile <name>', 'Reuse cookies from a specific Chrome profile.'],
     ['--browser-chrome-path <path>', 'Point to a custom Chrome/Chromium binary.'],
     ['--browser-cookie-path <path>', 'Use a specific Chrome/Chromium cookie store file.'],

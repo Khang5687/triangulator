@@ -60,7 +60,7 @@ export function applyHelpStyling(program: Command, version: string, isTty: boole
 }
 
 function renderHelpBanner(version: string, colors: HelpColors): string {
-  const subtitle = 'Prompt + files required — GPT-5.2 Pro/GPT-5.2 for tough questions with code/file context.';
+  const subtitle = 'Prompt + files required — API models + Perplexity Spaces browser automation.';
   return `${colors.banner(`Triangulator CLI v${version}`)} ${colors.subtitle(`— ${subtitle}`)}\n`;
 }
 
@@ -69,6 +69,8 @@ function renderHelpFooter(program: Command, colors: HelpColors): string {
     `${colors.bullet('•')} Required: always pass a prompt AND ${colors.accent('--file …')} (directories/globs are fine); Triangulator cannot see your project otherwise.`,
     `${colors.bullet('•')} Attach lots of source (whole directories beat single files) and keep total input under ~196k tokens.`,
     `${colors.bullet('•')} Triangulator starts empty—open with a short project briefing (stack, services, build steps), spell out the question and prior attempts, and why it matters; the more explanation and context you provide, the better the response will be.`,
+    `${colors.bullet('•')} Browser engine automates Perplexity Spaces; pass a Space URL via ${colors.accent('--perplexity-url')} and ensure cookies are available (or use ${colors.accent('--browser-manual-login')}).`,
+    `${colors.bullet('•')} Perplexity model picker, recency, and sources apply only in ${colors.accent('--perplexity-mode search')} (deep_research/create_files ignore them).`,
     `${colors.bullet('•')} Spell out the project + platform + version requirements (repo name, target OS/toolchain versions, API dependencies) so Triangulator doesn’t guess defaults.`,
     `${colors.bullet('•')} When comparing multiple repos/files, spell out each repo + path + role (e.g., “Project A SettingsView → apps/project-a/Sources/SettingsView.swift; Project B SettingsView → ../project-b/mac/...”) so the model knows exactly which file is which.`,
     `${colors.bullet('•')} Best results: 6–30 sentences plus key source files; very short prompts often yield generic answers.`,
@@ -93,6 +95,10 @@ function renderHelpFooter(program: Command, colors: HelpColors): string {
     formatExample(
       `${program.name()} --prompt "Cross-check the data layer assumptions" --models gpt-5.2-pro,gemini-3-pro --file "src/**/*.ts"`,
       'Run multiple API models in one go and aggregate cost/usage.',
+    ),
+    formatExample(
+      `${program.name()} --engine browser --perplexity-url "https://www.perplexity.ai/spaces/<space>" --perplexity-mode search --perplexity-thinking on --prompt "Review the TS data layer" --file "src/**/*.ts"`,
+      'Run a Perplexity Space search with a specific Space URL and thinking toggle.',
     ),
     formatExample(
       `${program.name()} status --hours 72 --limit 50`,
