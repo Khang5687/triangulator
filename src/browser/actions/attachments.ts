@@ -9,7 +9,7 @@ export async function uploadAttachmentFile(
   deps: { runtime: ChromeClient['Runtime']; dom?: ChromeClient['DOM']; input?: ChromeClient['Input'] },
   attachment: BrowserAttachment,
   logger: BrowserLogger,
-  options?: { expectedCount?: number },
+  options?: { expectedCount?: number; batchPaths?: string[] },
 ): Promise<boolean> {
   const { runtime, dom, input } = deps;
   if (!dom) {
@@ -19,6 +19,11 @@ export async function uploadAttachmentFile(
     typeof options?.expectedCount === 'number' && Number.isFinite(options.expectedCount)
       ? Math.max(0, Math.floor(options.expectedCount))
       : 0;
+  const batchPaths = Array.isArray(options?.batchPaths) && options?.batchPaths?.length > 0 ? options.batchPaths : null;
+  const isPerplexity = await runtime
+    .evaluate({ expression: 'location.href.includes(\"perplexity.ai\")', returnByValue: true })
+    .then((res) => Boolean(res?.result?.value))
+    .catch(() => false);
 
   const readAttachmentSignals = async (name: string) => {
     const check = await runtime.evaluate({
@@ -1037,8 +1042,11 @@ export async function uploadAttachmentFile(
         let immediateInputSnapshot = await readInputSnapshot(idx);
         let hasExpectedFile = snapshotMatchesExpected(immediateInputSnapshot);
         if (!hasExpectedFile) {
-          if (mode === 'set') {
-            await dom.setFileInputFiles({ nodeId: resultNode.nodeId, files: [attachment.path] });
+          if (mode === 'set' || batchPaths) {
+            await dom.setFileInputFiles({
+              nodeId: resultNode.nodeId,
+              files: batchPaths ?? [attachment.path],
+            });
           } else {
             const selector = `input[type="file"][data-triangulator-upload-idx="${idx}"]`;
             try {
@@ -1163,7 +1171,23 @@ export async function uploadAttachmentFile(
     const inputHasFile =
       inputNameCandidates.some((name) => matchesExpectedName(name)) ||
       (lastInputValue && matchesExpectedName(lastInputValue));
-    await waitForAttachmentVisible(runtime, expectedName, attachmentUiTimeoutMs, logger);
+    if (!inputHasFile && !inputConfirmed && !(isPerplexity && expectedCount > 1)) {
+      try {
+        await waitForAttachmentVisible(runtime, expectedName, attachmentUiTimeoutMs, logger);
+      } catch (error) {
+        const postSignals = await readAttachmentSignals(expectedName);
+        const countSatisfied =
+          expectedCount > 0 && (postSignals.fileCount >= expectedCount || postSignals.inputCount >= expectedCount);
+        if (!countSatisfied) {
+          throw error;
+        }
+        logger('Attachment count satisfied; skipping UI name confirmation.');
+      }
+    } else if (inputHasFile || inputConfirmed) {
+      logger('Attachment input accepted the file; skipping UI name confirmation.');
+    } else if (isPerplexity && expectedCount > 1) {
+      logger('Perplexity: skipping per-file UI confirmation for multi-file upload.');
+    }
     logger(inputHasFile ? 'Attachment queued (UI anchored, file input confirmed)' : 'Attachment queued (UI anchored)');
     return true;
   }
@@ -1173,7 +1197,23 @@ export async function uploadAttachmentFile(
     inputNameCandidates.some((name) => matchesExpectedName(name)) ||
     (lastInputValue && matchesExpectedName(lastInputValue));
   if (await waitForAttachmentAnchored(runtime, expectedName, attachmentUiTimeoutMs)) {
-    await waitForAttachmentVisible(runtime, expectedName, attachmentUiTimeoutMs, logger);
+    if (!inputHasFile && !inputConfirmed && !(isPerplexity && expectedCount > 1)) {
+      try {
+        await waitForAttachmentVisible(runtime, expectedName, attachmentUiTimeoutMs, logger);
+      } catch (error) {
+        const postSignals = await readAttachmentSignals(expectedName);
+        const countSatisfied =
+          expectedCount > 0 && (postSignals.fileCount >= expectedCount || postSignals.inputCount >= expectedCount);
+        if (!countSatisfied) {
+          throw error;
+        }
+        logger('Attachment count satisfied; skipping UI name confirmation.');
+      }
+    } else if (inputHasFile || inputConfirmed) {
+      logger('Attachment input accepted the file; skipping UI name confirmation.');
+    } else if (isPerplexity && expectedCount > 1) {
+      logger('Perplexity: skipping per-file UI confirmation for multi-file upload.');
+    }
     logger(inputHasFile ? 'Attachment queued (UI anchored, file input confirmed)' : 'Attachment queued (UI anchored)');
     return true;
   }
@@ -1661,6 +1701,8 @@ export async function waitForAttachmentCompletion(
         .filter(Boolean);
       const fileCount = typeof value.fileCount === 'number' ? value.fileCount : 0;
       const fileCountSatisfied = expectedNormalized.length > 0 && fileCount >= expectedNormalized.length;
+      const inputCountSatisfied = expectedNormalized.length > 0 && inputNames.length >= expectedNormalized.length;
+      const countSatisfied = fileCountSatisfied || inputCountSatisfied;
       const isPerplexity = Boolean(value.isPerplexity);
       const matchesExpected = (expected: string): boolean => {
         const baseName = expected.split('/').pop()?.split('\\').pop() ?? expected;
@@ -1683,7 +1725,13 @@ export async function waitForAttachmentCompletion(
         });
       };
       const missing = expectedNormalized.filter((expected) => !matchesExpected(expected));
-      if (isPerplexity && value.filesAttached && !value.uploading && (value.state === 'ready' || value.state === 'missing')) {
+      if (
+        isPerplexity &&
+        countSatisfied &&
+        value.filesAttached &&
+        !value.uploading &&
+        (value.state === 'ready' || value.state === 'missing')
+      ) {
         if (perplexityStableSince === null) {
           perplexityStableSince = Date.now();
         }
@@ -1693,7 +1741,7 @@ export async function waitForAttachmentCompletion(
       } else {
         perplexityStableSince = null;
       }
-      if (missing.length === 0 || fileCountSatisfied) {
+      if (missing.length === 0 || countSatisfied) {
         const stableThresholdMs = value.uploading ? 3000 : 1500;
         if (attachmentMatchSince === null) {
           attachmentMatchSince = Date.now();
@@ -1704,11 +1752,11 @@ export async function waitForAttachmentCompletion(
         }
         // Don't treat disabled button as complete - wait for it to become 'ready'.
         // The spinner detection is unreliable, so a disabled button likely means upload is in progress.
-        if (value.state === 'missing' && (value.filesAttached || fileCountSatisfied)) {
+        if (value.state === 'missing' && (value.filesAttached || countSatisfied)) {
           return;
         }
         // If files are attached but button isn't ready yet, give it more time but don't fail immediately.
-        if (value.filesAttached || fileCountSatisfied) {
+        if (value.filesAttached || countSatisfied) {
           await delay(500);
           continue;
         }
@@ -1728,8 +1776,8 @@ export async function waitForAttachmentCompletion(
       });
       // Don't include 'disabled' - a disabled button likely means upload is still in progress.
       const inputStateOk = value.state === 'ready' || value.state === 'missing';
-      const inputSeenNow = inputMissing.length === 0 || fileCountSatisfied;
-      const inputEvidenceOk = Boolean(value.filesAttached) || Boolean(value.uploading) || fileCountSatisfied;
+      const inputSeenNow = inputMissing.length === 0 || countSatisfied;
+      const inputEvidenceOk = Boolean(value.filesAttached) || Boolean(value.uploading) || countSatisfied;
       const stableThresholdMs = value.uploading ? 3000 : 1500;
       if (inputSeenNow && inputStateOk && inputEvidenceOk) {
         if (inputMatchSince === null) {

@@ -165,7 +165,7 @@ describe('attachment completion fallbacks', () => {
             uploading: false,
             filesAttached: true,
             attachedNames: [],
-            inputNames: [],
+            inputNames: ['upload-1', 'upload-2'],
             fileCount: 0,
             isPerplexity: true,
           },

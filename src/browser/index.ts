@@ -491,6 +491,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       const baselineAssistantText =
         typeof baselineSnapshot?.text === 'string' ? baselineSnapshot.text.trim() : '';
       const attachmentNames = submissionAttachments.map((a) => path.basename(a.path));
+      const isPerplexity = (config.url ?? '').includes('perplexity.ai');
       let attachmentWaitTimedOut = false;
       let inputOnlyAttachments = false;
       if (submissionAttachments.length > 0) {
@@ -505,19 +506,34 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           inputOnlyAttachments = false;
           await clearComposerAttachments(Runtime, 5_000, logger);
           try {
-            for (let attachmentIndex = 0; attachmentIndex < submissionAttachments.length; attachmentIndex += 1) {
-              const attachment = submissionAttachments[attachmentIndex];
-              logger(`Uploading attachment: ${attachment.displayPath}`);
+            if (isPerplexity && submissionAttachments.length > 1) {
+              logger(`Uploading ${submissionAttachments.length} attachments (batch)`);
+              const batchPaths = submissionAttachments.map((attachment) => attachment.path);
               const uiConfirmed = await uploadAttachmentFile(
                 { runtime: Runtime, dom: DOM, input: Input },
-                attachment,
+                submissionAttachments[0],
                 logger,
-                { expectedCount: attachmentIndex + 1 },
+                { expectedCount: submissionAttachments.length, batchPaths },
               );
               if (!uiConfirmed) {
                 inputOnlyAttachments = true;
               }
               await delay(500);
+            } else {
+              for (let attachmentIndex = 0; attachmentIndex < submissionAttachments.length; attachmentIndex += 1) {
+                const attachment = submissionAttachments[attachmentIndex];
+                logger(`Uploading attachment: ${attachment.displayPath}`);
+                const uiConfirmed = await uploadAttachmentFile(
+                  { runtime: Runtime, dom: DOM, input: Input },
+                  attachment,
+                  logger,
+                  { expectedCount: attachmentIndex + 1 },
+                );
+                if (!uiConfirmed) {
+                  inputOnlyAttachments = true;
+                }
+                await delay(500);
+              }
             }
             // Scale timeout based on number of files: base 45s + 20s per additional file.
             const baseTimeout = config.inputTimeoutMs ?? 30_000;
@@ -579,7 +595,6 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         }
       }
       if (attachmentNames.length > 0) {
-        const isPerplexity = (config.url ?? '').includes('perplexity.ai');
         if (attachmentWaitTimedOut) {
           logger('Attachment confirmation timed out; skipping user-turn attachment verification.');
         } else if (inputOnlyAttachments) {
