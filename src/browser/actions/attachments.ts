@@ -1324,6 +1324,7 @@ export async function waitForAttachmentCompletion(
   let inputMatchSince: number | null = null;
   let sawInputMatch = false;
   let attachmentMatchSince: number | null = null;
+  let perplexityStableSince: number | null = null;
   let lastVerboseLog = 0;
   const expression = `(() => {
     const sendSelectors = ${JSON.stringify(SEND_BUTTON_SELECTORS)};
@@ -1540,6 +1541,51 @@ export async function waitForAttachmentCompletion(
     const isPerplexity = typeof location === 'object' && location.href?.includes?.('perplexity.ai');
     const filesAttached =
       attachedNames.length > 0 || fileCount > 0 || (isPerplexity && inputNames.length > 0);
+    const errorPatterns = [
+      /failed to parse file/i,
+      /failed to parse/i,
+      /could not parse/i,
+      /failed to upload/i,
+      /upload failed/i,
+      /unable to upload/i,
+    ];
+    const toastSelectors = [
+      '[role="alert"]',
+      '[aria-live]',
+      '[data-testid*="toast"]',
+      '[data-testid*="snackbar"]',
+      '[class*="toast"]',
+      '[class*="snackbar"]',
+    ];
+    const toastNodes = Array.from(document.querySelectorAll(toastSelectors.join(',')));
+    const messages = new Set();
+    const collectLines = (raw) => {
+      const lines = String(raw || '')
+        .split(/\\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      for (const line of lines) {
+        if (errorPatterns.some((pattern) => pattern.test(line))) {
+          messages.add(line);
+        }
+      }
+    };
+    if (toastNodes.length > 0) {
+      for (const node of toastNodes) {
+        collectLines(node.textContent || '');
+      }
+    } else {
+      // Fallback: scan the body for explicit error lines.
+      const bodyText = document.body?.innerText ?? '';
+      for (const line of bodyText.split(/\\n+/)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (errorPatterns.some((pattern) => pattern.test(trimmed))) {
+          messages.add(trimmed);
+        }
+      }
+    }
+
     return {
       state: button ? (disabled ? 'disabled' : 'ready') : 'missing',
       uploading,
@@ -1547,6 +1593,8 @@ export async function waitForAttachmentCompletion(
       attachedNames,
       inputNames,
       fileCount,
+      errorMessages: Array.from(messages).slice(0, 5),
+      isPerplexity,
     };
   })()`;
   while (Date.now() < deadline) {
@@ -1559,6 +1607,8 @@ export async function waitForAttachmentCompletion(
       attachedNames?: string[];
       inputNames?: string[];
       fileCount?: number;
+      errorMessages?: string[];
+      isPerplexity?: boolean;
     } | undefined;
     if (!value && logger?.verbose) {
       const exception = (response as { exceptionDetails?: { text?: string; exception?: { description?: string } } })
@@ -1571,6 +1621,22 @@ export async function waitForAttachmentCompletion(
       }
     }
     if (value) {
+      const errorMessages = Array.isArray(value.errorMessages) ? value.errorMessages : [];
+      if (errorMessages.length > 0) {
+        const failures = expectedNormalized.filter((expected) => {
+          const baseName = expected.split('/').pop()?.split('\\').pop() ?? expected;
+          const normalizedExpected = baseName.toLowerCase().replace(/\s+/g, ' ').trim();
+          const expectedNoExt = normalizedExpected.replace(/\.[a-z0-9]{1,10}$/i, '');
+          return errorMessages.some((message) => {
+            const normalizedMessage = message.toLowerCase();
+            if (normalizedMessage.includes(normalizedExpected)) return true;
+            if (expectedNoExt.length >= 6 && normalizedMessage.includes(expectedNoExt)) return true;
+            return false;
+          });
+        });
+        const failureLabel = failures.length > 0 ? failures.join(', ') : 'unknown file';
+        throw new Error(`Attachment upload failed (${failureLabel}): ${errorMessages[0]}`);
+      }
       if (logger?.verbose) {
         const now = Date.now();
         if (now - lastVerboseLog > 3000) {
@@ -1595,6 +1661,7 @@ export async function waitForAttachmentCompletion(
         .filter(Boolean);
       const fileCount = typeof value.fileCount === 'number' ? value.fileCount : 0;
       const fileCountSatisfied = expectedNormalized.length > 0 && fileCount >= expectedNormalized.length;
+      const isPerplexity = Boolean(value.isPerplexity);
       const matchesExpected = (expected: string): boolean => {
         const baseName = expected.split('/').pop()?.split('\\').pop() ?? expected;
         const normalizedExpected = baseName.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -1616,6 +1683,16 @@ export async function waitForAttachmentCompletion(
         });
       };
       const missing = expectedNormalized.filter((expected) => !matchesExpected(expected));
+      if (isPerplexity && value.filesAttached && !value.uploading && (value.state === 'ready' || value.state === 'missing')) {
+        if (perplexityStableSince === null) {
+          perplexityStableSince = Date.now();
+        }
+        if (Date.now() - perplexityStableSince > 1500) {
+          return;
+        }
+      } else {
+        perplexityStableSince = null;
+      }
       if (missing.length === 0 || fileCountSatisfied) {
         const stableThresholdMs = value.uploading ? 3000 : 1500;
         if (attachmentMatchSince === null) {

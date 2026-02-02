@@ -128,6 +128,56 @@ describe('attachment completion fallbacks', () => {
     await assertion;
     useRealTime();
   });
+
+  test('waitForAttachmentCompletion fails fast when Perplexity reports a parse error', async () => {
+    useFakeTime();
+
+    const runtime = {
+      evaluate: vi.fn().mockResolvedValue({
+        result: {
+          value: {
+            state: 'ready',
+            uploading: false,
+            filesAttached: true,
+            attachedNames: [],
+            inputNames: [],
+            fileCount: 0,
+            isPerplexity: true,
+            errorMessages: ['Failed to parse file large.pdf.'],
+          },
+        },
+      }),
+    } as unknown as ChromeClient['Runtime'];
+
+    const promise = waitForAttachmentCompletion(runtime, 10_000, ['large.pdf']);
+    await expect(promise).rejects.toThrow(/Attachment upload failed/i);
+    useRealTime();
+  });
+
+  test('waitForAttachmentCompletion resolves for Perplexity when files are attached but names never surface', async () => {
+    useFakeTime();
+
+    const runtime = {
+      evaluate: vi.fn().mockResolvedValue({
+        result: {
+          value: {
+            state: 'ready',
+            uploading: false,
+            filesAttached: true,
+            attachedNames: [],
+            inputNames: [],
+            fileCount: 0,
+            isPerplexity: true,
+          },
+        },
+      }),
+    } as unknown as ChromeClient['Runtime'];
+
+    const promise = waitForAttachmentCompletion(runtime, 10_000, ['file-a.txt', 'file-b.txt']);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(promise).resolves.toBeUndefined();
+    useRealTime();
+  });
 });
 
 describe('sent turn attachment verification', () => {

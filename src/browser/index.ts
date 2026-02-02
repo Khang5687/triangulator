@@ -63,6 +63,35 @@ export type { BrowserAutomationConfig, BrowserRunOptions, BrowserRunResult } fro
 export { PERPLEXITY_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET } from './constants.js';
 export { parseDuration, delay, normalizePerplexityUrl } from './utils.js';
 
+const MAX_ATTACHMENT_RETRIES = 2;
+
+function parseAttachmentFailure(
+  error: unknown,
+  submissionAttachments: BrowserAttachment[],
+): { files: string[]; message: string } | null {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const normalizedMessage = message.toLowerCase();
+  if (
+    !normalizedMessage.includes('attachment upload failed') &&
+    !normalizedMessage.includes('failed to parse file') &&
+    !normalizedMessage.includes('failed to upload') &&
+    !normalizedMessage.includes('could not parse') &&
+    !normalizedMessage.includes('attachment did not register')
+  ) {
+    return null;
+  }
+  const match = message.match(/Attachment upload failed \(([^)]+)\)/i);
+  const filesFromLabel =
+    match?.[1]
+      ?.split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean) ?? [];
+  const attachmentNames = submissionAttachments.map((attachment) => path.basename(attachment.path));
+  const matchedNames = attachmentNames.filter((name) => normalizedMessage.includes(name.toLowerCase()));
+  const files = Array.from(new Set([...filesFromLabel, ...matchedNames]));
+  return { files, message };
+}
+
 export async function runBrowserMode(options: BrowserRunOptions): Promise<BrowserRunResult> {
   const promptText = options.prompt?.trim();
   if (!promptText) {
@@ -468,38 +497,66 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         if (!DOM) {
           throw new Error('Chrome DOM domain unavailable while uploading attachments.');
         }
-        await clearComposerAttachments(Runtime, 5_000, logger);
-        for (let attachmentIndex = 0; attachmentIndex < submissionAttachments.length; attachmentIndex += 1) {
-          const attachment = submissionAttachments[attachmentIndex];
-          logger(`Uploading attachment: ${attachment.displayPath}`);
-          const uiConfirmed = await uploadAttachmentFile(
-            { runtime: Runtime, dom: DOM, input: Input },
-            attachment,
-            logger,
-            { expectedCount: attachmentIndex + 1 },
-          );
-          if (!uiConfirmed) {
-            inputOnlyAttachments = true;
+        let attempt = 0;
+        while (true) {
+          if (attempt > 0) {
+            logger(`[retry] Re-uploading attachments (attempt ${attempt + 1}/${MAX_ATTACHMENT_RETRIES + 1})`);
           }
-          await delay(500);
-        }
-        // Scale timeout based on number of files: base 45s + 20s per additional file.
-        const baseTimeout = config.inputTimeoutMs ?? 30_000;
-        const perFileTimeout = 20_000;
-        const waitBudget = Math.max(baseTimeout, 45_000) + (submissionAttachments.length - 1) * perFileTimeout;
-        try {
-          await waitForAttachmentCompletion(Runtime, waitBudget, attachmentNames, logger);
-          logger('All attachments uploaded');
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          if (/Attachments did not finish uploading before timeout/i.test(message)) {
-            attachmentWaitTimedOut = true;
-            logger(
-              `[browser] Attachment upload timed out after ${Math.round(waitBudget / 1000)}s; continuing without confirmation.`,
-            );
-          } else {
+          inputOnlyAttachments = false;
+          await clearComposerAttachments(Runtime, 5_000, logger);
+          try {
+            for (let attachmentIndex = 0; attachmentIndex < submissionAttachments.length; attachmentIndex += 1) {
+              const attachment = submissionAttachments[attachmentIndex];
+              logger(`Uploading attachment: ${attachment.displayPath}`);
+              const uiConfirmed = await uploadAttachmentFile(
+                { runtime: Runtime, dom: DOM, input: Input },
+                attachment,
+                logger,
+                { expectedCount: attachmentIndex + 1 },
+              );
+              if (!uiConfirmed) {
+                inputOnlyAttachments = true;
+              }
+              await delay(500);
+            }
+            // Scale timeout based on number of files: base 45s + 20s per additional file.
+            const baseTimeout = config.inputTimeoutMs ?? 30_000;
+            const perFileTimeout = 20_000;
+            const waitBudget = Math.max(baseTimeout, 45_000) + (submissionAttachments.length - 1) * perFileTimeout;
+            try {
+              await waitForAttachmentCompletion(Runtime, waitBudget, attachmentNames, logger);
+              logger('All attachments uploaded');
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              const failure = parseAttachmentFailure(error, submissionAttachments);
+              if (failure && attempt < MAX_ATTACHMENT_RETRIES) {
+                const fileLabel = failure.files.length > 0 ? failure.files.join(', ') : 'unknown file';
+                logger(`[browser] Attachment upload failed (${fileLabel}); retrying...`);
+                attempt += 1;
+                await delay(1_000);
+                continue;
+              }
+              if (/Attachments did not finish uploading before timeout/i.test(message)) {
+                attachmentWaitTimedOut = true;
+                logger(
+                  `[browser] Attachment upload timed out after ${Math.round(waitBudget / 1000)}s; continuing without confirmation.`,
+                );
+              } else {
+                throw error;
+              }
+            }
+          } catch (error) {
+            const failure = parseAttachmentFailure(error, submissionAttachments);
+            if (failure && attempt < MAX_ATTACHMENT_RETRIES) {
+              const fileLabel = failure.files.length > 0 ? failure.files.join(', ') : 'unknown file';
+              logger(`[browser] Attachment upload failed (${fileLabel}); retrying...`);
+              attempt += 1;
+              await delay(1_000);
+              continue;
+            }
             throw error;
           }
+          break;
         }
       }
       let baselineTurns = await readConversationTurnCount(Runtime, logger);
@@ -1182,30 +1239,71 @@ async function runRemoteBrowserMode(
       const baselineAssistantText =
         typeof baselineSnapshot?.text === 'string' ? baselineSnapshot.text.trim() : '';
       const attachmentNames = submissionAttachments.map((a) => path.basename(a.path));
+      let attachmentWaitTimedOut = false;
       if (submissionAttachments.length > 0) {
         if (!DOM) {
           throw new Error('Chrome DOM domain unavailable while uploading attachments.');
         }
-        await clearComposerAttachments(Runtime, 5_000, logger);
-        // Use remote file transfer for remote Chrome (reads local files and injects via CDP)
-        for (const attachment of submissionAttachments) {
-          logger(`Uploading attachment: ${attachment.displayPath}`);
-          await uploadAttachmentViaDataTransfer({ runtime: Runtime, dom: DOM }, attachment, logger);
-          await delay(500);
+        let attempt = 0;
+        while (true) {
+          if (attempt > 0) {
+            logger(`[retry] Re-uploading attachments (attempt ${attempt + 1}/${MAX_ATTACHMENT_RETRIES + 1})`);
+          }
+          await clearComposerAttachments(Runtime, 5_000, logger);
+          try {
+            // Use remote file transfer for remote Chrome (reads local files and injects via CDP)
+            for (const attachment of submissionAttachments) {
+              logger(`Uploading attachment: ${attachment.displayPath}`);
+              await uploadAttachmentViaDataTransfer({ runtime: Runtime, dom: DOM }, attachment, logger);
+              await delay(500);
+            }
+            // Scale timeout based on number of files: base 30s + 15s per additional file
+            const baseTimeout = config.inputTimeoutMs ?? 30_000;
+            const perFileTimeout = 15_000;
+            const waitBudget = Math.max(baseTimeout, 30_000) + (submissionAttachments.length - 1) * perFileTimeout;
+            try {
+              await waitForAttachmentCompletion(Runtime, waitBudget, attachmentNames, logger);
+              logger('All attachments uploaded');
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              const failure = parseAttachmentFailure(error, submissionAttachments);
+              if (failure && attempt < MAX_ATTACHMENT_RETRIES) {
+                const fileLabel = failure.files.length > 0 ? failure.files.join(', ') : 'unknown file';
+                logger(`[browser] Attachment upload failed (${fileLabel}); retrying...`);
+                attempt += 1;
+                await delay(1_000);
+                continue;
+              }
+              if (/Attachments did not finish uploading before timeout/i.test(message)) {
+                attachmentWaitTimedOut = true;
+                logger(
+                  `[browser] Attachment upload timed out after ${Math.round(waitBudget / 1000)}s; continuing without confirmation.`,
+                );
+              } else {
+                throw error;
+              }
+            }
+          } catch (error) {
+            const failure = parseAttachmentFailure(error, submissionAttachments);
+            if (failure && attempt < MAX_ATTACHMENT_RETRIES) {
+              const fileLabel = failure.files.length > 0 ? failure.files.join(', ') : 'unknown file';
+              logger(`[browser] Attachment upload failed (${fileLabel}); retrying...`);
+              attempt += 1;
+              await delay(1_000);
+              continue;
+            }
+            throw error;
+          }
+          break;
         }
-        // Scale timeout based on number of files: base 30s + 15s per additional file
-        const baseTimeout = config.inputTimeoutMs ?? 30_000;
-        const perFileTimeout = 15_000;
-        const waitBudget = Math.max(baseTimeout, 30_000) + (submissionAttachments.length - 1) * perFileTimeout;
-        await waitForAttachmentCompletion(Runtime, waitBudget, attachmentNames, logger);
-        logger('All attachments uploaded');
       }
       let baselineTurns = await readConversationTurnCount(Runtime, logger);
+      const sendAttachmentNames = attachmentWaitTimedOut ? [] : attachmentNames;
       const committedTurns = await submitPrompt(
         {
           runtime: Runtime,
           input: Input,
-          attachmentNames,
+          attachmentNames: sendAttachmentNames,
           baselineTurns: baselineTurns ?? undefined,
           inputTimeoutMs: config.inputTimeoutMs ?? undefined,
         },
