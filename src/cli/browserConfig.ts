@@ -14,6 +14,7 @@ import {
   normalizePerplexityRecency,
   normalizePerplexitySources,
   normalizePerplexityConnectors,
+  normalizePerplexityModelLabel,
 } from '../browser/perplexityConfig.js';
 import { normalizeBrowserModelStrategy } from '../browser/modelStrategy.js';
 import type { BrowserModelStrategy } from '../browser/types.js';
@@ -132,17 +133,20 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
   const rawUrl = options.perplexityUrl ?? options.chatgptUrl ?? options.browserUrl;
   const url = rawUrl ? normalizePerplexityUrl(rawUrl, PERPLEXITY_URL) : undefined;
 
-  const desiredModel = isPickerModel
+  const desiredModelRaw = isPickerModel
     ? mapModelToBrowserLabel(options.model)
     : shouldUseOverride
       ? desiredModelOverride
       : mapModelToBrowserLabel(options.model);
+  const isPerplexity = Boolean(url && url.includes('perplexity.ai'));
+  const desiredModel = isPerplexity ? normalizePerplexityModelLabel(desiredModelRaw) : desiredModelRaw;
 
   const perplexityMode = normalizePerplexityMode(options.perplexityMode) ?? undefined;
   const perplexityRecency = normalizePerplexityRecency(options.perplexityRecency) ?? undefined;
   const perplexitySources = normalizePerplexitySources(options.perplexitySources ?? undefined);
   const perplexityConnectors = normalizePerplexityConnectors(options.perplexityConnectors ?? undefined);
-  const modelFallback = options.modelFallback?.trim?.() || undefined;
+  const modelFallbackRaw = options.modelFallback?.trim?.() || undefined;
+  const modelFallback = isPerplexity && modelFallbackRaw ? normalizePerplexityModelLabel(modelFallbackRaw) : modelFallbackRaw;
 
   return {
     chromeProfile: options.browserChromeProfile ?? DEFAULT_CHROME_PROFILE,

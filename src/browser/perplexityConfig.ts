@@ -1,5 +1,17 @@
 import type { PerplexityMode, PerplexityRecency } from './types.js';
 
+const PERPLEXITY_MODEL_LABELS = [
+  'Best',
+  'Sonar',
+  'Gemini 3 Flash',
+  'Gemini 3 Pro',
+  'GPT-5.2',
+  'Claude Sonnet 4.5',
+  'Claude Opus 4.5',
+  'Grok 4.1',
+  'Kimi K2.5',
+] as const;
+
 export function parseCommaList(value?: string | string[] | null): string[] | null {
   if (!value) return null;
   const entries = Array.isArray(value) ? value : value.split(',');
@@ -58,4 +70,32 @@ export function normalizePerplexityConnectors(input?: string[] | string | null):
   if (!entries) return null;
   const normalized = entries.map((entry) => entry.toLowerCase());
   return normalized.length ? Array.from(new Set(normalized)) : null;
+}
+
+export function normalizePerplexityModelLabel(value?: string | null): string {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return 'Best';
+  }
+  const clean = normalized.replace(/[^a-z0-9.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const has = (needle: string) => clean.includes(needle);
+  const hasVersion = (major: number, minor: number) =>
+    new RegExp(`\\b${major}\\s*\\.?\\s*${minor}\\b`).test(clean);
+
+  if (has('best') || has('auto')) return 'Best';
+  if (has('sonar')) return 'Sonar';
+  const hasGemini3 = hasVersion(3, 0) || /\b3\b/.test(clean);
+  if (has('gemini') && hasGemini3 && has('flash')) return 'Gemini 3 Flash';
+  if (has('gemini') && hasGemini3 && has('pro')) return 'Gemini 3 Pro';
+  if (has('gpt') && hasVersion(5, 2)) return 'GPT-5.2';
+  if ((has('claude') || has('sonnet')) && hasVersion(4, 5) && has('sonnet')) return 'Claude Sonnet 4.5';
+  if ((has('claude') || has('opus')) && hasVersion(4, 5) && has('opus')) return 'Claude Opus 4.5';
+  if (has('grok') && hasVersion(4, 1)) return 'Grok 4.1';
+  if (has('kimi') && (has('k2') || hasVersion(2, 5))) return 'Kimi K2.5';
+
+  return 'Best';
+}
+
+export function listPerplexityModelLabels(): string[] {
+  return [...PERPLEXITY_MODEL_LABELS];
 }
