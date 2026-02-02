@@ -163,25 +163,41 @@ export async function uploadAttachmentFile(
         const inputScope = scope ? Array.from(scope.querySelectorAll('input[type="file"]')) : [];
         const inputs = [];
         const inputSeen = new Set();
-        for (const el of [...inputScope, ...Array.from(document.querySelectorAll('input[type="file"]'))]) {
-          if (!inputSeen.has(el)) {
-            inputSeen.add(el);
-            inputs.push(el);
-          }
-        }
-        const inputNames = [];
-        let inputCount = 0;
-        for (const el of inputs) {
-          if (!(el instanceof HTMLInputElement)) continue;
-          const files = Array.from(el.files || []);
-          if (files.length > 0) {
-            inputCount += files.length;
-            for (const file of files) {
-              if (file?.name) inputNames.push(file.name);
+        const addInputs = (nodes) => {
+          for (const el of nodes) {
+            if (!inputSeen.has(el)) {
+              inputSeen.add(el);
+              inputs.push(el);
             }
           }
+        };
+        addInputs(inputScope);
+        const readInputs = () => {
+          const names = [];
+          let count = 0;
+          for (const el of inputs) {
+            if (!(el instanceof HTMLInputElement)) continue;
+            const files = Array.from(el.files || []);
+            if (files.length > 0) {
+              count += files.length;
+              for (const file of files) {
+                if (file?.name) names.push(file.name);
+              }
+            }
+          }
+          return { names, count };
+        };
+        let { names: inputNames, count: inputCount } = readInputs();
+        let inputMatch = inputNames.some((file) => matchesExpected(file));
+        if (!inputMatch) {
+          addInputs(Array.from(document.querySelectorAll('input[type="file"]')));
+          if (inputs.length > inputScope.length) {
+            const refreshed = readInputs();
+            inputNames = refreshed.names;
+            inputCount = refreshed.count;
+            inputMatch = inputNames.some((file) => matchesExpected(file));
+          }
         }
-        const inputMatch = inputNames.some((file) => matchesExpected(file));
         const uploadingSelectors = ${JSON.stringify(UPLOAD_STATUS_SELECTORS)};
         const uploading = uploadingSelectors.some((selector) => {
           return Array.from(document.querySelectorAll(selector)).some((node) => {

@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { BrowserLogger, ChromeClient, PerplexityMode, PerplexityRecency } from '../types.js';
 import {
+  MENU_CONTAINER_SELECTOR,
   MENU_ITEM_SELECTOR,
   PERPLEXITY_MODE_BUTTONS,
   PERPLEXITY_RECENCY_BUTTON_SELECTOR,
@@ -189,9 +190,11 @@ function buildRecencySelectionExpression(recency: PerplexityRecency): string {
 function buildSourcesSelectionExpression(targets: string[]): string {
   const targetsLiteral = JSON.stringify(targets);
   const buttonSelector = JSON.stringify(PERPLEXITY_SOURCES_BUTTON_SELECTOR);
+  const menuSelector = JSON.stringify(MENU_CONTAINER_SELECTOR);
   return `(async () => {
     ${buildClickDispatcher()}
     const BUTTON_SELECTOR = ${buttonSelector};
+    const MENU_SELECTOR = ${menuSelector};
     const targets = ${targetsLiteral}.map((t) => (t || '').trim()).filter(Boolean);
     const button = document.querySelector(BUTTON_SELECTOR);
     if (!button) return { status: 'button-missing', missing: targets };
@@ -220,11 +223,20 @@ function buildSourcesSelectionExpression(targets: string[]): string {
       const dataState = (node.getAttribute('data-state') || '').toLowerCase();
       return ariaChecked === 'true' || ariaSelected === 'true' || dataState === 'checked' || dataState === 'selected';
     };
-    const candidates = Array.from(
-      document.querySelectorAll('button, [role=menuitem], [role=menuitemcheckbox], label, div, span'),
+    const findMenu = () => {
+      const menus = Array.from(document.querySelectorAll(MENU_SELECTOR));
+      return menus.length ? menus[menus.length - 1] : null;
+    };
+    const menu = findMenu();
+    const lookup = (root) => Array.from(
+      (root || document).querySelectorAll('button, [role=menuitem], [role=menuitemcheckbox], label, div, span'),
     )
       .map((node) => ({ node, text: getLabel(node) }))
       .filter((entry) => entry.text.length > 0 && entry.text.length < 80);
+    let candidates = lookup(menu);
+    if (candidates.length === 0 && menu) {
+      candidates = lookup(document);
+    }
     const missing = [];
     const disabled = [];
     const toggled = [];
