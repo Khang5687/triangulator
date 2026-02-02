@@ -95,6 +95,23 @@ describe('buildBrowserConfig', () => {
     expect(config.desiredModel).toBe('GPT-5.2');
   });
 
+  test('normalizes Perplexity model labels when Perplexity URL is provided', async () => {
+    const config = await buildBrowserConfig({
+      model: 'gpt-5.2-pro',
+      perplexityUrl: 'https://www.perplexity.ai/spaces/triangulator',
+    });
+    expect(config.desiredModel).toBe('GPT-5.2');
+  });
+
+  test('normalizes Perplexity model fallback when Perplexity URL is provided', async () => {
+    const config = await buildBrowserConfig({
+      model: 'gpt-5.2-pro',
+      perplexityUrl: 'https://www.perplexity.ai/spaces/triangulator',
+      modelFallback: 'unknown-model',
+    });
+    expect(config.modelFallback).toBe('Best');
+  });
+
   test('parses remoteChrome host targets', async () => {
     const config = await buildBrowserConfig({
       model: 'gpt-5.2-pro',

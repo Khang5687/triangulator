@@ -37,21 +37,17 @@ function normalizeLabel(label: string): string {
   return label.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+const SPACE_URL =
+  process.env.TRIANGULATOR_PERPLEXITY_SPACE_URL ??
+  'https://www.perplexity.ai/spaces/triangulator-0U6ZuYXTRQCTHPmLdhgWhQ';
+
 const CASES = [
   {
-    name: 'auto',
+    name: 'gpt-5.2',
     desiredModel: 'GPT-5.2',
+    perplexityThinking: true,
+    perplexityRecency: 'year' as const,
     expected: ['5.2'],
-  },
-  {
-    name: 'thinking',
-    desiredModel: 'GPT-5.2 Thinking',
-    expected: ['5.2', 'thinking'],
-  },
-  {
-    name: 'instant',
-    desiredModel: 'GPT-5.2 Instant',
-    expected: ['5.2', 'instant'],
   },
 ];
 
@@ -73,6 +69,10 @@ const CASES = [
                 prompt: `${promptToken}\nRepeat the first line exactly. No other text.`,
                 config: {
                   chromeProfile: 'Default',
+                  url: SPACE_URL,
+                  perplexityMode: 'search',
+                  perplexityThinking: entry.perplexityThinking,
+                  perplexityRecency: entry.perplexityRecency,
                   desiredModel: entry.desiredModel,
                   timeoutMs: 180_000,
                 },
@@ -94,6 +94,10 @@ const CASES = [
                   expect(label).toContain(token);
                 }
               }
+              const recencyLog = lines.find((line) => line.toLowerCase().startsWith('recency:'));
+              expect(recencyLog).toBeTruthy();
+              const thinkingLog = lines.find((line) => line.toLowerCase().startsWith('thinking toggle:'));
+              expect(thinkingLog).toBeTruthy();
               break;
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
