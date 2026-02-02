@@ -11,7 +11,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="MIT License"></a>
 </p>
 
-Triangulator bundles your prompt and files so another AI can answer with real context. It speaks GPT-5.1 Pro (default alias to GPT-5.2 Pro on the API), GPT-5.1 Codex (API-only), GPT-5.1, GPT-5.2, Gemini 3 Pro, Claude Sonnet 4.5, Claude Opus 4.1, and more—and it can ask one or multiple models in a single run. Browser automation is available for Perplexity Spaces; API remains the most reliable path, and `--copy` is an easy manual fallback.
+Triangulator bundles your prompt and files so another AI can answer with real context. It speaks GPT-5.1 Pro (default alias to GPT-5.2 Pro on the API), GPT-5.1 Codex (API-only), GPT-5.1, GPT-5.2, Gemini 3 Pro, Claude Sonnet 4.5, Claude Opus 4.1, and more—and it can ask one or multiple models in a single run. Browser automation targets Perplexity Spaces (Projects → Spaces); API remains the most reliable path, and `--copy` is an easy manual fallback.
 
 ## Quick start
 
@@ -64,6 +64,7 @@ Engine auto-picks API when `OPENAI_API_KEY` is set, otherwise browser; browser i
   - Run `npx -y triangulator --help` once per session before first use.
   ```
 - Tip: set `browser.perplexityUrl` in config (or `--perplexity-url`) to a dedicated Perplexity Space so browser runs don’t clutter your main history.
+- Perplexity browser runs support Search / Deep research / Create files modes, but only **Search** exposes the model picker.
 
 **Codex skill**
 - Copy the bundled skill from this repo to your Codex skills folder:
@@ -94,6 +95,7 @@ npx -y triangulator triangulator-mcp
 - Bundle once, reuse anywhere (API or experimental browser).
 - Multi-model API runs with aggregated cost/usage, including OpenRouter IDs alongside first-party models.
 - Render/copy bundles for manual paste into Perplexity when automation is blocked.
+- Perplexity browser automation understands Spaces, recency filters, sources/connectors, and file uploads.
 - GPT‑5 Pro API runs detach by default; reattach via `triangulator session <id>` / `triangulator status` or block with `--wait`.
 - Azure endpoints supported via `--azure-endpoint/--azure-deployment/--azure-api-version` or `AZURE_OPENAI_*` envs.
 - File safety: globs/excludes, size guards, `--files-report`.
@@ -111,6 +113,12 @@ npx -y triangulator triangulator-mcp
 | `--models <list>` | Comma-separated API models (mix built-ins and OpenRouter ids) for multi-model runs. |
 | `--base-url <url>` | Point API runs at LiteLLM/Azure/OpenRouter/etc. |
 | `--perplexity-url <url>` | Target a Perplexity Space (browser). |
+| `--perplexity-mode <search\|deep_research\|create_files>` | Perplexity mode (Search is the only one with model picker). |
+| `--perplexity-recency <all\|day\|week\|month\|year>` | Perplexity recency filter (Search only). |
+| `--perplexity-sources <list>` | Comma-separated sources (web, academic, social). |
+| `--perplexity-connectors <list>` | Comma-separated connectors (e.g., github, asana). |
+| `--[no-]skip-failed-sources` | Skip unavailable sources/connectors (default true). |
+| `--model-fallback <model>` | Fallback model when requested model is unavailable (Perplexity only). |
 | `--browser-model-strategy <select\|current\|ignore>` | Browser model picker strategy (ignored for Perplexity). |
 | `--browser-manual-login` | Skip cookie copy; reuse a persistent automation profile and wait for manual Perplexity login. |
 | `--browser-thinking-time <light\|standard\|extended\|heavy>` | Set thinking-time intensity (browser; Thinking/Pro models only). |
@@ -136,25 +144,102 @@ npx -y triangulator triangulator-mcp
 
 ## Configuration
 
-Put defaults in `~/.triangulator/config.json` (JSON5). Example:
+Put defaults in `~/.triangulator/config.json` (JSON5). Triangulator also migrates from `~/.oracle/config.json` on first run.
+
+### Full config template (JSON5)
 ```json5
 {
-  model: "gpt-5.1-pro",
-  engine: "api",
+  // Core run defaults
+  engine: "browser", // api | browser
+  model: "gpt-5.2", // API model or Perplexity browser model label
+  models: "gpt-5.2,gemini-3-pro", // optional multi-model API list
   filesReport: true,
+  promptSuffix: "",
+  sessionRetentionHours: 336,
+
+  // API / Azure
+  apiBaseUrl: "",
+  azure: {
+    endpoint: "",
+    deployment: "",
+    apiVersion: ""
+  },
+
+  // Notifications
+  notify: {
+    enabled: true,
+    sound: true,
+    muteIn: ["CI", "SSH"]
+  },
+
+  // Perplexity browser automation
   browser: {
-    perplexityUrl: "https://www.perplexity.ai/spaces/new-space-0U6ZuYXTRQCTHPmLdhgWhQ"
+    // Target a Perplexity Space
+    perplexityUrl: "https://www.perplexity.ai/spaces/your-space-id",
+
+    // Chrome cookie reuse (macOS example)
+    chromeProfile: "Default",
+    chromePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    chromeCookiePath: "~/Library/Application Support/Google/Chrome/Profile 1/Cookies",
+
+    // Optional: manual login profile (skip cookie sync)
+    manualLogin: false,
+    manualLoginProfileDir: "~/.triangulator/browser-profile",
+
+    // Perplexity UI controls
+    perplexityMode: "search", // search | deep_research | create_files
+    perplexityThinking: true, // best-effort toggle; ignored if forced/unsupported
+    perplexityRecency: "year", // all | day | week | month | year
+    perplexitySources: ["web", "academic"], // web | academic | social
+    perplexityConnectors: ["github"], // optional connectors (must be pre-connected in UI)
+    skipFailedSources: true, // if false, error with a debug log path
+
+    // Model fallback when requested model is not available
+    modelFallback: "Best",
+
+    // Browser tuning
+    timeoutMs: 1200000,
+    inputTimeoutMs: 60000,
+    cookieSyncWaitMs: 0,
+    debugPort: null,
+    headless: false,
+    hideWindow: false,
+    keepBrowser: false,
+    modelStrategy: "select", // select | current | ignore
+    thinkingTime: "standard"
   }
 }
 ```
+
 Use `browser.perplexityUrl` (or the legacy alias `browser.url`) to target a specific Perplexity Space for browser automation.
 See [docs/configuration.md](docs/configuration.md) for precedence and full schema.
+
+### Perplexity model list (Search mode)
+
+Perplexity’s Search mode currently exposes:
+- Best
+- Sonar
+- Gemini 3 Flash (thinking togglable)
+- Gemini 3 Pro (thinking forced on)
+- GPT‑5.2 (thinking togglable)
+- Claude Sonnet 4.5 (thinking togglable)
+- Claude Opus 4.5 (Max plan only; togglable thinking)
+- Grok 4.1 (thinking togglable)
+- Kimi K2.5 (thinking forced on)
+
+If your config/model is **not** on this list, Triangulator falls back to **Best**. For Max‑only models, set `modelFallback` or rerun with a different `--model`.
+
+### Perplexity notes & precautions
+- Only **Search** exposes the model picker. Deep research / Create files ignore `--model`.
+- `perplexityThinking` is best‑effort. If the model forces thinking on/off, the toggle is ignored.
+- Sources/connectors must already be connected in your Perplexity account. With `skipFailedSources: false`, the run aborts and writes a debug log to `~/.triangulator/debug/...`.
+- Attachments are supported via local file upload only (Connect Files is not automated).
 
 Advanced flags
 
 | Area | Flags |
 | --- | --- |
-| Browser | `--browser-manual-login`, `--browser-thinking-time`, `--browser-timeout`, `--browser-input-timeout`, `--browser-cookie-wait`, `--browser-inline-cookies[(-file)]`, `--browser-attachments`, `--browser-inline-files`, `--browser-bundle-files`, `--browser-keep-browser`, `--browser-headless`, `--browser-hide-window`, `--browser-no-cookie-sync`, `--browser-allow-cookie-errors`, `--browser-chrome-path`, `--browser-cookie-path`, `--perplexity-url` |
+| Browser | `--perplexity-mode`, `--perplexity-recency`, `--perplexity-sources`, `--perplexity-connectors`, `--[no-]skip-failed-sources`, `--model-fallback`, `--browser-manual-login`, `--browser-thinking-time`, `--browser-timeout`, `--browser-input-timeout`, `--browser-cookie-wait`, `--browser-inline-cookies[(-file)]`, `--browser-attachments`, `--browser-inline-files`, `--browser-bundle-files`, `--browser-keep-browser`, `--browser-headless`, `--browser-hide-window`, `--browser-no-cookie-sync`, `--browser-allow-cookie-errors`, `--browser-chrome-path`, `--browser-cookie-path`, `--perplexity-url` |
 | Run control | `--background`, `--no-background`, `--http-timeout`, `--zombie-timeout`, `--zombie-last-activity` |
 | Azure/OpenAI | `--azure-endpoint`, `--azure-deployment`, `--azure-api-version`, `--base-url` |
 
