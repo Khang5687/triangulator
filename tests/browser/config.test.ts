@@ -38,7 +38,7 @@ describe('resolveBrowserConfig', () => {
   test('normalizes trailing slashes for the configured URL', () => {
     const resolved = resolveBrowserConfig({
       url: 'https://www.perplexity.ai',
-      desiredModel: 'GPT-5.2 Pro',
+      desiredModel: 'GPT-5.2',
     });
     expect(resolved.url).toBe('https://www.perplexity.ai/');
   });

@@ -5,6 +5,7 @@ import {
   MODEL_BUTTON_SELECTOR,
   PERPLEXITY_MODEL_BUTTON_SELECTOR,
 } from '../constants.js';
+import { listPerplexityModelLabels } from '../perplexityConfig.js';
 import { logDomFailure } from '../domDebug.js';
 import { buildClickDispatcher } from './domEvents.js';
 
@@ -446,14 +447,22 @@ function buildPerplexityModelSelectionExpression(targetModel: string): string {
   const buttonSelector = JSON.stringify(PERPLEXITY_MODEL_BUTTON_SELECTOR);
   const itemSelector = JSON.stringify('[role="menuitem"], [role="menuitemradio"], [role="option"], button');
   const menuSelector = JSON.stringify(MENU_CONTAINER_SELECTOR);
+  const knownModels = JSON.stringify(listPerplexityModelLabels());
   return `(async () => {
     ${buildClickDispatcher()}
     const BUTTON_SELECTOR = ${buttonSelector};
     const ITEM_SELECTOR = ${itemSelector};
     const MENU_SELECTOR = ${menuSelector};
     const TARGET = ${targetLiteral};
+    const KNOWN_MODELS = ${knownModels};
     const normalize = (value) => (value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\\s+/g, ' ').trim();
     const normalizedTarget = normalize(TARGET);
+    const modelTokens = KNOWN_MODELS.map(normalize).filter(Boolean);
+    const matchesModelLabel = (label) => {
+      const normalized = normalize(label);
+      if (!normalized) return false;
+      return modelTokens.some((token) => normalized.includes(token));
+    };
     const wantsPro = normalizedTarget.includes(' pro');
     const wantsInstant = normalizedTarget.includes('instant');
     const wantsThinking = normalizedTarget.includes('thinking');
@@ -469,7 +478,24 @@ function buildPerplexityModelSelectionExpression(targetModel: string): string {
       if (wantsMax && !normalized.includes('max')) return false;
       return true;
     };
-    const button = document.querySelector(BUTTON_SELECTOR);
+    const pickFallbackButton = () => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const candidates = buttons.filter((node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        if (node.closest('[role="menu"], [data-radix-collection-root]')) return false;
+        const label = (node.getAttribute('aria-label') || node.textContent || '').trim();
+        return matchesModelLabel(label);
+      });
+      return candidates.length ? candidates[candidates.length - 1] : null;
+    };
+
+    let button = document.querySelector(BUTTON_SELECTOR);
+    if (button && button.closest('[role="menu"], [data-radix-collection-root]')) {
+      button = null;
+    }
+    if (!button) {
+      button = pickFallbackButton();
+    }
     if (!button) return { status: 'button-missing' };
     const currentLabel = (button.getAttribute('aria-label') || button.textContent || '').trim();
     if (currentLabel) {
@@ -497,8 +523,13 @@ function buildPerplexityModelSelectionExpression(targetModel: string): string {
       menu = findMenu();
     }
     const scope = menu || document;
-    const items = Array.from(scope.querySelectorAll(ITEM_SELECTOR));
-    const available = items.map((node) => (node.textContent || '').trim()).filter(Boolean);
+    const items = Array.from(scope.querySelectorAll(ITEM_SELECTOR)).filter((node) => {
+      const label = (node.getAttribute?.('aria-label') || node.textContent || '').trim();
+      return matchesModelLabel(label);
+    });
+    const available = items
+      .map((node) => (node.getAttribute?.('aria-label') || node.textContent || '').trim())
+      .filter(Boolean);
     const targetTokens = stripTokens(TARGET);
     const best = items
       .map((node) => {

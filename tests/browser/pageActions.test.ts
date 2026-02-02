@@ -26,10 +26,10 @@ describe('ensureModelSelection', () => {
       evaluate: vi
         .fn()
         .mockResolvedValueOnce({ result: { value: 'chatgpt.com' } })
-        .mockResolvedValue({ result: { value: { status: 'already-selected', label: 'GPT-5.2 Pro' } } }),
+        .mockResolvedValue({ result: { value: { status: 'already-selected', label: 'GPT-5.2' } } }),
     } as unknown as ChromeClient['Runtime'];
-    await expect(ensureModelSelection(runtime, 'GPT-5.2 Pro', logger)).resolves.toBeUndefined();
-    expect(logger).toHaveBeenCalledWith('Model picker: GPT-5.2 Pro');
+    await expect(ensureModelSelection(runtime, 'GPT-5.2', logger)).resolves.toBeUndefined();
+    expect(logger).toHaveBeenCalledWith('Model picker: GPT-5.2');
   });
 
   test('throws when option missing', async () => {

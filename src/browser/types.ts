@@ -100,7 +100,14 @@ export interface BrowserRunResult {
 export type ResolvedBrowserConfig = Required<
   Omit<
     BrowserAutomationConfig,
-    'chromeProfile' | 'chromePath' | 'chromeCookiePath' | 'desiredModel' | 'remoteChrome' | 'thinkingTime' | 'modelStrategy'
+    | 'chromeProfile'
+    | 'chromePath'
+    | 'chromeCookiePath'
+    | 'desiredModel'
+    | 'remoteChrome'
+    | 'thinkingTime'
+    | 'modelStrategy'
+    | 'perplexityThinking'
   >
 > & {
   chromeProfile?: string | null;
@@ -115,4 +122,5 @@ export type ResolvedBrowserConfig = Required<
   manualLogin?: boolean;
   manualLoginProfileDir?: string | null;
   manualLoginCookieSync?: boolean;
+  perplexityThinking?: boolean;
 };

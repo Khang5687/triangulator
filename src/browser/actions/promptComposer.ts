@@ -214,7 +214,7 @@ async function waitForDomReady(Runtime: ChromeClient['Runtime'], logger?: Browse
       returnByValue: true,
     });
     const value = result?.value as { ready?: boolean; composer?: boolean; fileInput?: boolean } | undefined;
-    if (value?.ready && value.composer) {
+    if (value?.composer || (value?.ready && value?.fileInput)) {
       return;
     }
     await delay(150);
@@ -417,10 +417,15 @@ async function verifyPromptCommitted(
       assistantVisible?: boolean;
       composerCleared?: boolean;
       inConversation?: boolean;
+      href?: string;
       turnsCount?: number;
     };
     const turnsCount = (result.value as { turnsCount?: number } | undefined)?.turnsCount;
+    const isPerplexity = typeof info?.href === 'string' && info.href.includes('perplexity.ai');
     if (info?.treatAsNewTurn && (info?.lastMatched || info?.userMatched || info?.prefixMatched || info?.threadLinkMatched)) {
+      return typeof turnsCount === 'number' && Number.isFinite(turnsCount) ? turnsCount : null;
+    }
+    if (isPerplexity && info?.treatAsNewTurn && info?.hasNewTurn && info?.assistantVisible) {
       return typeof turnsCount === 'number' && Number.isFinite(turnsCount) ? turnsCount : null;
     }
     const fallbackCommit =

@@ -44,7 +44,7 @@ export function resolveRunOptionsFromConfig({
     resolvedEngine === 'browser' && normalizedRequestedModels.length === 0
       ? inferModelFromLabel(cliModelArg)
       : resolveApiModel(cliModelArg);
-  // Browser engine maps Pro/legacy aliases to the latest browser picker targets (GPT-5.2 / GPT-5.2 Pro).
+  // Browser engine maps Pro/legacy aliases to the latest browser picker targets (GPT-5.2).
   const resolvedModel = resolvedEngine === 'browser' ? normalizeModelForBrowser(inferredModel) : inferredModel;
   const isCodex = resolvedModel.startsWith('gpt-5.1-codex');
   const isClaude = resolvedModel.startsWith('claude');

@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import type { WriteStream } from 'node:fs';
 import net from 'node:net';
-import type { BrowserModelStrategy, CookieParam } from './browser/types.js';
+import type { BrowserModelStrategy, CookieParam, PerplexityMode, PerplexityRecency } from './browser/types.js';
 import type { TransportFailureReason, AzureOptions, ModelName, ThinkingTimeLevel } from './oracle.js';
 import { DEFAULT_MODEL, formatElapsed } from './oracle.js';
 import { safeModelSlug } from './oracle/modelResolver.js';
@@ -41,11 +41,11 @@ export interface BrowserSessionConfig {
   /** Thinking time intensity: 'light', 'standard', 'extended', 'heavy' */
   thinkingTime?: ThinkingTimeLevel;
   /** Perplexity-only: mode (search, deep_research, create_files). */
-  perplexityMode?: string | null;
+  perplexityMode?: PerplexityMode;
   /** Perplexity-only: thinking toggle. */
   perplexityThinking?: boolean;
   /** Perplexity-only: recency filter. */
-  perplexityRecency?: string | null;
+  perplexityRecency?: PerplexityRecency;
   /** Perplexity-only: sources to enable. */
   perplexitySources?: string[] | null;
   /** Perplexity-only: connectors to enable. */

@@ -227,16 +227,20 @@ function buildSourcesSelectionExpression(targets: string[]): string {
       const menus = Array.from(document.querySelectorAll(MENU_SELECTOR));
       return menus.length ? menus[menus.length - 1] : null;
     };
-    const menu = findMenu();
+    let menu = findMenu();
+    const menuDeadline = performance.now() + 1200;
+    while (!menu && performance.now() < menuDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      menu = findMenu();
+    }
     const lookup = (root) => Array.from(
-      (root || document).querySelectorAll('button, [role=menuitem], [role=menuitemcheckbox], label, div, span'),
+      root
+        ? root.querySelectorAll('button, [role=menuitem], [role=menuitemcheckbox], label, div, span')
+        : [],
     )
       .map((node) => ({ node, text: getLabel(node) }))
       .filter((entry) => entry.text.length > 0 && entry.text.length < 80);
     let candidates = lookup(menu);
-    if (candidates.length === 0 && menu) {
-      candidates = lookup(document);
-    }
     const missing = [];
     const disabled = [];
     const toggled = [];

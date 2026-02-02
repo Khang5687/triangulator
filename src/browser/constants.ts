@@ -1,7 +1,7 @@
 import type { BrowserModelStrategy } from './types.js';
 
 export const PERPLEXITY_URL = 'https://www.perplexity.ai/';
-export const DEFAULT_MODEL_TARGET = 'GPT-5.2 Pro';
+export const DEFAULT_MODEL_TARGET = 'GPT-5.2';
 export const DEFAULT_MODEL_STRATEGY: BrowserModelStrategy = 'select';
 export const COOKIE_URLS = ['https://www.perplexity.ai', 'https://perplexity.ai'];
 
@@ -94,7 +94,11 @@ export const PERPLEXITY_MODE_BUTTONS = {
 } as const;
 export const PERPLEXITY_MODEL_BUTTON_SELECTOR =
   'button[aria-label="Choose a model"], ' +
+  'button[aria-label*="model"], ' +
   'button[aria-label*="GPT"], button[aria-label*="Sonar"], button[aria-label*="Gemini"], ' +
   'button[aria-label*="Claude"], button[aria-label*="Grok"], button[aria-label*="Kimi"]';
-export const PERPLEXITY_RECENCY_BUTTON_SELECTOR = 'button[aria-label="Set recency for web search"]';
-export const PERPLEXITY_SOURCES_BUTTON_SELECTOR = 'button[aria-label="Sources"]';
+export const PERPLEXITY_RECENCY_BUTTON_SELECTOR =
+  'button[aria-label="Set recency for web search"], ' +
+  'button[aria-label*="recency"], button[aria-label*="Recency"], button[title*="recency"], button[title*="Recency"]';
+export const PERPLEXITY_SOURCES_BUTTON_SELECTOR =
+  'button[aria-label="Sources"], button[aria-label*="Sources"], button[title*="Sources"], button[data-testid*="sources"]';

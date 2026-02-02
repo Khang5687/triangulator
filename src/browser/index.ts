@@ -1239,6 +1239,7 @@ async function runRemoteBrowserMode(
       }
     }
     stopThinkingMonitor = startThinkingStatusMonitor(Runtime, logger, options.verbose ?? false);
+    const minTurnIndex = (config.url ?? '').includes('perplexity.ai') ? undefined : baselineTurns ?? undefined;
     // Helper to normalize text for echo detection (collapse whitespace, lowercase)
     const normalizeForComparison = (text: string): string =>
       text.toLowerCase().replace(/\s+/g, ' ').trim();
