@@ -6,6 +6,7 @@ import {
   MENU_CONTAINER_SELECTOR,
   MENU_ITEM_SELECTOR,
   PERPLEXITY_MODE_BUTTONS,
+  PERPLEXITY_MODEL_BUTTON_SELECTOR,
   PERPLEXITY_RECENCY_BUTTON_SELECTOR,
   PERPLEXITY_SOURCES_BUTTON_SELECTOR,
 } from '../constants.js';
@@ -281,25 +282,48 @@ function buildSourcesSelectionExpression(targets: string[]): string {
 
 function buildThinkingToggleExpression(enabled: boolean): string {
   const enabledLiteral = JSON.stringify(enabled);
+  const modelButtonSelector = JSON.stringify(PERPLEXITY_MODEL_BUTTON_SELECTOR);
+  const menuSelector = JSON.stringify(MENU_CONTAINER_SELECTOR);
   return `(() => {
     ${buildClickDispatcher()}
     const ENABLED = ${enabledLiteral};
+    const MODEL_BUTTON_SELECTOR = ${modelButtonSelector};
+    const MENU_SELECTOR = ${menuSelector};
     const normalize = (value) => (value || '').toLowerCase();
-    const candidates = Array.from(document.querySelectorAll('button, [role=switch], [role=checkbox]'));
-    const toggle = candidates.find((node) => {
-      const label = normalize(node.getAttribute('aria-label') || node.textContent || '');
-      return label.includes('thinking') || label.includes('reasoning');
-    });
+    const labelFor = (node) => (node.getAttribute('aria-label') || node.textContent || '').trim();
+    const isChecked = (node) => {
+      const ariaChecked = node.getAttribute('aria-checked');
+      const ariaPressed = node.getAttribute('aria-pressed');
+      const dataState = (node.getAttribute('data-state') || '').toLowerCase();
+      return ariaChecked === 'true' || ariaPressed === 'true' || dataState === 'checked' || dataState === 'on';
+    };
+    const findToggle = (root) => {
+      const scope = root ?? document;
+      const nodes = Array.from(
+        scope.querySelectorAll('button, [role=switch], [role=checkbox], [role=menuitem], [role=menuitemcheckbox]')
+      );
+      return nodes.find((node) => {
+        const label = normalize(labelFor(node));
+        return label.includes('thinking') || label.includes('reasoning');
+      });
+    };
+    let toggle = findToggle();
+    if (!toggle) {
+      const button = document.querySelector(MODEL_BUTTON_SELECTOR);
+      if (button) {
+        dispatchClickSequence(button);
+        const menus = Array.from(document.querySelectorAll(MENU_SELECTOR));
+        const menu = menus.length ? menus[menus.length - 1] : null;
+        toggle = findToggle(menu);
+      }
+    }
     if (!toggle) return { status: 'unsupported' };
-    const isOn =
-      toggle.getAttribute('aria-checked') === 'true' ||
-      toggle.getAttribute('data-state') === 'checked' ||
-      toggle.getAttribute('aria-pressed') === 'true';
+    const isOn = isChecked(toggle);
     if ((ENABLED && isOn) || (!ENABLED && !isOn)) {
-      return { status: 'already', label: toggle.getAttribute('aria-label') || '' };
+      return { status: 'already', label: labelFor(toggle) };
     }
     dispatchClickSequence(toggle);
-    return { status: 'toggled', label: toggle.getAttribute('aria-label') || '' };
+    return { status: 'toggled', label: labelFor(toggle) };
   })()`;
 }
 

@@ -628,28 +628,31 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     }
     answerText = answer.text;
     answerHtml = answer.html ?? '';
-    const copiedMarkdown = await raceWithDisconnect(
-      withRetries(
-        async () => {
-          const attempt = await captureAssistantMarkdown(Runtime, answer.meta, logger);
-          if (!attempt) {
-            throw new Error('copy-missing');
-          }
-          return attempt;
-        },
-        {
-          retries: 2,
-          delayMs: 350,
-          onRetry: (attempt, error) => {
-            if (options.verbose) {
-              logger(
-                `[retry] Markdown capture attempt ${attempt + 1}: ${error instanceof Error ? error.message : error}`,
-              );
-            }
-          },
-        },
-      ),
-    ).catch(() => null);
+    const isPerplexity = (config.url ?? '').includes('perplexity.ai');
+    const copiedMarkdown = isPerplexity
+      ? null
+      : await raceWithDisconnect(
+          withRetries(
+            async () => {
+              const attempt = await captureAssistantMarkdown(Runtime, answer.meta, logger);
+              if (!attempt) {
+                throw new Error('copy-missing');
+              }
+              return attempt;
+            },
+            {
+              retries: 2,
+              delayMs: 350,
+              onRetry: (attempt, error) => {
+                if (options.verbose) {
+                  logger(
+                    `[retry] Markdown capture attempt ${attempt + 1}: ${error instanceof Error ? error.message : error}`,
+                  );
+                }
+              },
+            },
+          ),
+        ).catch(() => null);
     answerMarkdown = copiedMarkdown ?? answerText;
 
     const promptEchoMatcher = buildPromptEchoMatcher(promptText);
@@ -1295,27 +1298,30 @@ async function runRemoteBrowserMode(
     }
     answerText = answer.text;
     answerHtml = answer.html ?? '';
+    const isPerplexity = (config.url ?? '').includes('perplexity.ai');
 
-    const copiedMarkdown = await withRetries(
-      async () => {
-        const attempt = await captureAssistantMarkdown(Runtime, answer.meta, logger);
-        if (!attempt) {
-          throw new Error('copy-missing');
-        }
-        return attempt;
-      },
-      {
-        retries: 2,
-        delayMs: 350,
-        onRetry: (attempt, error) => {
-          if (options.verbose) {
-            logger(
-              `[retry] Markdown capture attempt ${attempt + 1}: ${error instanceof Error ? error.message : error}`,
-            );
-          }
-        },
-      },
-    ).catch(() => null);
+    const copiedMarkdown = isPerplexity
+      ? null
+      : await withRetries(
+          async () => {
+            const attempt = await captureAssistantMarkdown(Runtime, answer.meta, logger);
+            if (!attempt) {
+              throw new Error('copy-missing');
+            }
+            return attempt;
+          },
+          {
+            retries: 2,
+            delayMs: 350,
+            onRetry: (attempt, error) => {
+              if (options.verbose) {
+                logger(
+                  `[retry] Markdown capture attempt ${attempt + 1}: ${error instanceof Error ? error.message : error}`,
+                );
+              }
+            },
+          },
+        ).catch(() => null);
 
     answerMarkdown = copiedMarkdown ?? answerText;
     ({ answerText, answerMarkdown } = await maybeRecoverLongAssistantResponse({
