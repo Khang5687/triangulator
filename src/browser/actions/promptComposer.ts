@@ -30,6 +30,8 @@ export async function submitPrompt(
     baselineTurns?: number | null;
     inputTimeoutMs?: number | null;
     noSubmit?: boolean;
+    afterFocus?: () => Promise<void>;
+    beforeSubmit?: () => Promise<void>;
   },
   prompt: string,
   logger: BrowserLogger,
@@ -78,6 +80,9 @@ export async function submitPrompt(
   if (!focusResult.result?.value?.focused) {
     await logDomFailure(runtime, logger, 'focus-textarea');
     throw new Error('Failed to focus prompt textarea');
+  }
+  if (deps.afterFocus) {
+    await deps.afterFocus();
   }
 
   await input.insertText({ text: prompt });
@@ -148,6 +153,10 @@ export async function submitPrompt(
       promptLength,
       observedLength,
     });
+  }
+
+  if (deps.beforeSubmit) {
+    await deps.beforeSubmit();
   }
 
   if (deps.noSubmit) {

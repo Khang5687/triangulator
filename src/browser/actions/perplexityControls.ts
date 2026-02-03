@@ -50,6 +50,185 @@ export async function ensurePerplexityMode(
   throw new Error('Unable to locate Perplexity mode controls.');
 }
 
+export async function stabilizePerplexityMode(
+  Runtime: ChromeClient['Runtime'],
+  mode: PerplexityMode,
+  logger: BrowserLogger,
+  durationMs = 1200,
+) {
+  const modeLiteral = JSON.stringify(mode);
+  const outcome = await Runtime.evaluate({
+    expression: `(async () => {
+      ${buildClickDispatcher()}
+      const normalize = (value) => (value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+      const wantedLabels = {
+        search: ['search'],
+        deep_research: ['deep research', 'research'],
+        create_files: ['create files and apps', 'create files', 'create', 'labs', 'apps'],
+      };
+      const allWanted = Object.values(wantedLabels).flat();
+      const getLabel = (node) => {
+        if (!node) return '';
+        return (
+          (node.getAttribute?.('aria-label') || '').trim() ||
+          (node.getAttribute?.('title') || '').trim() ||
+          (node.textContent || '').trim()
+        );
+      };
+      const isChecked = (node) => {
+        if (!node) return false;
+        return (
+          node.getAttribute('aria-checked') === 'true' ||
+          node.getAttribute('aria-selected') === 'true' ||
+          node.getAttribute('aria-pressed') === 'true' ||
+          node.getAttribute('data-state') === 'checked'
+        );
+      };
+      const currentActiveLabel = () => {
+        const candidates = Array.from(document.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"]'));
+        const active = candidates.find((node) => isChecked(node));
+        return active ? getLabel(active) : null;
+      };
+      const desired = wantedLabels[${modeLiteral}] || [${modeLiteral}];
+      const findButton = () => {
+        const candidates = Array.from(document.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"], button'));
+        const labelMatches = (node) => {
+          const label = normalize(getLabel(node));
+          return desired.some((entry) => label.includes(entry));
+        };
+        const exactMatch = candidates.find((node) => normalize(getLabel(node)) === desired[0]);
+        if (exactMatch) return exactMatch;
+        const radioMatch = candidates.find((node) => labelMatches(node) && node.getAttribute?.('role') === 'radio');
+        if (radioMatch) return radioMatch;
+        return candidates.find(labelMatches) || null;
+      };
+      const button = findButton();
+      const deadline = performance.now() + ${Math.max(200, durationMs)};
+      let corrected = 0;
+      while (performance.now() < deadline) {
+        const active = normalize(currentActiveLabel() || '');
+        const matched = desired.some((entry) => active.includes(entry));
+        if (!matched && button) {
+          dispatchClickSequence(button);
+          if (typeof button.click === 'function') button.click();
+          corrected += 1;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+      const finalActive = currentActiveLabel();
+      return { corrected, finalActive };
+    })()`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  const result = outcome.result?.value as { corrected?: number; finalActive?: string | null } | undefined;
+  if (result && typeof result.corrected === 'number' && result.corrected > 0) {
+    logger(`Perplexity mode stabilized (corrected ${result.corrected}x).`);
+  }
+  if (result?.finalActive) {
+    logger(`Perplexity mode: ${result.finalActive}`);
+  }
+}
+
+export async function installPerplexityModeGuard(
+  Runtime: ChromeClient['Runtime'],
+  mode: PerplexityMode,
+  logger: BrowserLogger,
+  durationMs = 20_000,
+) {
+  const modeLiteral = JSON.stringify(mode);
+  const outcome = await Runtime.evaluate({
+    expression: `(() => {
+      const normalize = (value) => (value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+      const wantedLabels = {
+        search: ['search'],
+        deep_research: ['deep research', 'research'],
+        create_files: ['create files and apps', 'create files', 'create', 'labs', 'apps'],
+      };
+      const getLabel = (node) => {
+        if (!node) return '';
+        return (
+          (node.getAttribute?.('aria-label') || '').trim() ||
+          (node.getAttribute?.('title') || '').trim() ||
+          (node.textContent || '').trim()
+        );
+      };
+      const isChecked = (node) => {
+        if (!node) return false;
+        return (
+          node.getAttribute('aria-checked') === 'true' ||
+          node.getAttribute('aria-selected') === 'true' ||
+          node.getAttribute('aria-pressed') === 'true' ||
+          node.getAttribute('data-state') === 'checked'
+        );
+      };
+      const currentActiveLabel = () => {
+        const candidates = Array.from(document.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"]'));
+        const active = candidates.find((node) => isChecked(node));
+        return active ? getLabel(active) : null;
+      };
+      const desired = wantedLabels[${modeLiteral}] || [${modeLiteral}];
+      const findButton = () => {
+        const candidates = Array.from(document.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"], button'));
+        const labelMatches = (node) => {
+          const label = normalize(getLabel(node));
+          return desired.some((entry) => label.includes(entry));
+        };
+        const exactMatch = candidates.find((node) => normalize(getLabel(node)) === desired[0]);
+        if (exactMatch) return exactMatch;
+        const radioMatch = candidates.find((node) => labelMatches(node) && node.getAttribute?.('role') === 'radio');
+        if (radioMatch) return radioMatch;
+        return candidates.find(labelMatches) || null;
+      };
+      const button = findButton();
+      const guard = window.__triangulatorModeGuard || {};
+      const now = performance.now();
+      guard.desired = desired;
+      guard.stopAt = now + ${Math.max(1000, durationMs)};
+      guard.corrected = guard.corrected || 0;
+      if (!guard.intervalId) {
+        guard.intervalId = window.setInterval(() => {
+          if (performance.now() > guard.stopAt) {
+            window.clearInterval(guard.intervalId);
+            guard.intervalId = null;
+            return;
+          }
+          const active = normalize(currentActiveLabel() || '');
+          const matched = desired.some((entry) => active.includes(entry));
+          if (!matched && button) {
+            button.click();
+            guard.corrected += 1;
+          }
+        }, 150);
+      }
+      window.__triangulatorModeGuard = guard;
+      return { status: 'installed', corrected: guard.corrected };
+    })()`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  const result = outcome.result?.value as { status?: string; corrected?: number } | undefined;
+  if (result?.status === 'installed') {
+    logger('Perplexity mode guard: active');
+  }
+}
+
+export async function stopPerplexityModeGuard(Runtime: ChromeClient['Runtime']) {
+  await Runtime.evaluate({
+    expression: `(() => {
+      const guard = window.__triangulatorModeGuard;
+      if (guard?.intervalId) {
+        window.clearInterval(guard.intervalId);
+      }
+      if (guard) {
+        guard.intervalId = null;
+        guard.stopAt = 0;
+      }
+    })()`,
+    returnByValue: true,
+  }).catch(() => null);
+}
+
 export async function ensurePerplexityRecency(
   Runtime: ChromeClient['Runtime'],
   recency: PerplexityRecency,
@@ -155,6 +334,163 @@ export async function ensurePerplexityThinking(
     return;
   }
   logger(`Thinking toggle: ${result.status === 'already' ? 'already set' : 'updated'}`);
+}
+
+export async function installPerplexityModeWatch(
+  Runtime: ChromeClient['Runtime'],
+  logger: BrowserLogger,
+): Promise<boolean> {
+  const outcome = await Runtime.evaluate({
+    expression: `(() => {
+      const existing = window.__triangulatorModeWatch;
+      if (existing?.active) {
+        return { status: 'existing', active: existing.active };
+      }
+      const normalize = (value) => String(value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+      const labelFor = (node) =>
+        normalize(node?.getAttribute?.('aria-label') || node?.getAttribute?.('title') || node?.textContent || '');
+      const describeNode = (node) => {
+        if (!node || !(node instanceof HTMLElement)) return null;
+        return {
+          tag: node.tagName,
+          role: node.getAttribute('role'),
+          aria: node.getAttribute('aria-label'),
+          title: node.getAttribute('title'),
+          class: (node.className || '').toString().slice(0, 120),
+          text: (node.textContent || '').trim().slice(0, 80),
+        };
+      };
+      const getActive = () => {
+        const active =
+          Array.from(document.querySelectorAll('button[role="radio"], [role="radio"]'))
+            .find((node) => node.getAttribute?.('aria-checked') === 'true' || node.getAttribute?.('aria-selected') === 'true') ||
+          null;
+        return active ? labelFor(active) : null;
+      };
+      const getState = () => {
+        const sources = document.querySelector('button[aria-label="Sources"]');
+        const recency = document.querySelector('button[aria-label="Set recency for web search"]');
+        const prompt = document.querySelector('[contenteditable="true"], textarea');
+        const attachments = Array.from(document.querySelectorAll('[data-testid*="attachment"], [data-testid*="upload"], input[type="file"]')).length;
+        const modeButtons = Array.from(document.querySelectorAll('button[role="radio"], [role="radio"]')).map((node) => ({
+          label: labelFor(node),
+          checked: node.getAttribute('aria-checked'),
+          selected: node.getAttribute('aria-selected'),
+          class: (node.getAttribute('class') || '').slice(0, 80),
+        }));
+        return {
+          active: getActive(),
+          sourcesOpen: sources?.getAttribute?.('data-state') || null,
+          recencyOpen: recency?.getAttribute?.('data-state') || null,
+          hasPrompt: Boolean(prompt),
+          attachmentNodes: attachments,
+          modeButtons,
+        };
+      };
+      const log = [];
+      let lastActive = getActive();
+      let lastEvent = null;
+      const snapshot = (reason) => {
+        log.push({
+          ts: Date.now(),
+          reason,
+          active: getActive(),
+          lastEvent,
+          state: getState(),
+        });
+        lastEvent = null;
+      };
+      const onEvent = (event) => {
+        lastEvent = {
+          type: event.type,
+          key: event.key || null,
+          label: labelFor(event.target),
+          target: describeNode(event.target),
+        };
+      };
+      const observer = new MutationObserver(() => {
+        const active = getActive();
+        if (active !== lastActive) {
+          lastActive = active;
+          snapshot('mode-change');
+        }
+      });
+      observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['aria-checked', 'aria-selected', 'data-state', 'class'],
+      });
+      ['click', 'pointerdown', 'pointerup', 'keydown', 'keyup', 'focus'].forEach((type) => {
+        document.addEventListener(type, onEvent, true);
+      });
+      snapshot('install');
+      window.__triangulatorModeWatch = {
+        active: lastActive,
+        log,
+        snapshot,
+        stop: () => {
+          observer.disconnect();
+          ['click', 'pointerdown', 'pointerup', 'keydown', 'keyup', 'focus'].forEach((type) => {
+            document.removeEventListener(type, onEvent, true);
+          });
+        },
+      };
+      return { status: 'installed', active: lastActive };
+    })()`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  const result = outcome.result?.value as { status?: string; active?: string | null } | undefined;
+  if (result?.status === 'installed') {
+    logger(`Perplexity mode watch: installed (active=${result.active ?? 'unknown'})`);
+    return true;
+  }
+  if (result?.status === 'existing') {
+    logger(`Perplexity mode watch: already active (active=${result.active ?? 'unknown'})`);
+    return true;
+  }
+  return false;
+}
+
+export async function recordPerplexityModeSnapshot(
+  Runtime: ChromeClient['Runtime'],
+  label: string,
+): Promise<void> {
+  await Runtime.evaluate({
+    expression: `(() => {
+      const watch = window.__triangulatorModeWatch;
+      if (watch?.snapshot) {
+        watch.snapshot(${JSON.stringify(label)});
+      }
+    })()`,
+    returnByValue: true,
+  }).catch(() => null);
+}
+
+export async function dumpPerplexityModeWatch(
+  Runtime: ChromeClient['Runtime'],
+  logger: BrowserLogger,
+): Promise<string | null> {
+  const outcome = await Runtime.evaluate({
+    expression: `(() => {
+      const watch = window.__triangulatorModeWatch;
+      if (!watch?.log) return { status: 'missing' };
+      if (watch.snapshot) watch.snapshot('dump');
+      return { status: 'ok', log: watch.log };
+    })()`,
+    returnByValue: true,
+  }).catch(() => null);
+  const result = outcome?.result?.value as { status?: string; log?: unknown } | undefined;
+  if (result?.status !== 'ok' || !result.log) {
+    return null;
+  }
+  const dir = path.join(os.homedir(), '.triangulator', 'debug');
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  const filename = `perplexity-mode-watch-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  const filePath = path.join(dir, filename);
+  await fs.writeFile(filePath, JSON.stringify(result.log, null, 2), 'utf8');
+  logger(`Perplexity mode watch: log saved to ${filePath}`);
+  return filePath;
 }
 
 function buildModeSelectionExpression(mode: PerplexityMode): string {

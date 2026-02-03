@@ -10,9 +10,15 @@ export {
 export { ensureModelSelection } from './actions/modelSelection.js';
 export {
   ensurePerplexityMode,
+  stabilizePerplexityMode,
+  installPerplexityModeGuard,
+  stopPerplexityModeGuard,
   ensurePerplexityRecency,
   ensurePerplexitySources,
   ensurePerplexityThinking,
+  installPerplexityModeWatch,
+  recordPerplexityModeSnapshot,
+  dumpPerplexityModeWatch,
 } from './actions/perplexityControls.js';
 export { submitPrompt, clearPromptComposer } from './actions/promptComposer.js';
 export {
