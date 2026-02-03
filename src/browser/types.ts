@@ -63,6 +63,8 @@ export interface BrowserAutomationConfig {
   skipFailedSources?: boolean;
   /** Optional model fallback if requested model is unavailable. */
   modelFallback?: string | null;
+  /** Fill the prompt and attachments but do not submit. */
+  noSubmit?: boolean;
 }
 
 export interface BrowserRunOptions {
@@ -123,4 +125,5 @@ export type ResolvedBrowserConfig = Required<
   manualLoginProfileDir?: string | null;
   manualLoginCookieSync?: boolean;
   perplexityThinking?: boolean;
+  noSubmit?: boolean;
 };

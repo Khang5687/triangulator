@@ -18,6 +18,7 @@ import {
   navigateToPerplexity,
   navigateToPromptReadyWithFallback,
   ensureNotBlocked,
+  dismissBlockingUi,
   ensureLoggedIn,
   ensurePromptReady,
   ensurePerplexityMode,
@@ -349,11 +350,13 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     } else {
       await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
     }
+    await raceWithDisconnect(dismissBlockingUi(Runtime, logger).catch(() => false));
     logger(`Prompt textarea ready (initial focus, ${promptText.length.toLocaleString()} chars queued)`);
     const perplexityMode = config.perplexityMode ?? 'search';
     const isSearchMode = perplexityMode === 'search';
     await raceWithDisconnect(ensurePerplexityMode(Runtime, perplexityMode, logger));
     await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
+    await raceWithDisconnect(dismissBlockingUi(Runtime, logger).catch(() => false));
     if (!isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
       logger(`Perplexity sources/connectors ignored for mode=${perplexityMode} (search only).`);
     }
@@ -495,7 +498,11 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     if (typeof config.perplexityThinking === 'boolean') {
       await raceWithDisconnect(ensurePerplexityThinking(Runtime, config.perplexityThinking, logger));
     }
-    const submitOnce = async (prompt: string, submissionAttachments: BrowserAttachment[]) => {
+    const submitOnce = async (
+      prompt: string,
+      submissionAttachments: BrowserAttachment[],
+    ): Promise<{ baselineTurns: number | null; baselineAssistantText: string | null; noSubmit: boolean }> => {
+      await dismissBlockingUi(Runtime, logger).catch(() => false);
       const baselineSnapshot = await readAssistantSnapshot(Runtime).catch(() => null);
       const baselineAssistantText =
         typeof baselineSnapshot?.text === 'string' ? baselineSnapshot.text.trim() : '';
@@ -594,10 +601,15 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           attachmentNames: sendAttachmentNames,
           baselineTurns: baselineTurns ?? undefined,
           inputTimeoutMs: config.inputTimeoutMs ?? undefined,
+          noSubmit: config.noSubmit,
         },
         prompt,
         logger,
       );
+      if (config.noSubmit) {
+        logger('No-submit mode: prompt filled; skipping send + response wait.');
+        return { baselineTurns, baselineAssistantText, noSubmit: true };
+      }
       if (typeof committedTurns === 'number' && Number.isFinite(committedTurns)) {
         if (baselineTurns === null || committedTurns > baselineTurns) {
           baselineTurns = Math.max(0, committedTurns - 1);
@@ -621,7 +633,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       await maybeOpenPerplexityThread(Page, Runtime, prompt, logger);
       // Reattach needs a Spaces URL; it can update late, so poll in the background.
       scheduleConversationHint('post-submit', config.timeoutMs ?? 120_000);
-      return { baselineTurns, baselineAssistantText };
+      return { baselineTurns, baselineAssistantText, noSubmit: false };
     };
 
     let responseAttempt = 0;
@@ -634,6 +646,29 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       let usedAttachments = currentAttachments;
       try {
         const submission = await raceWithDisconnect(submitOnce(usedPrompt, usedAttachments));
+        if (submission.noSubmit) {
+          runStatus = 'complete';
+          answerText = '[no-submit] Prompt filled; not submitted.';
+          answerMarkdown = answerText;
+          const durationMs = Date.now() - startedAt;
+          const answerChars = answerText.length;
+          const answerTokens = estimateTokenCount(answerMarkdown);
+          return {
+            answerText,
+            answerMarkdown,
+            answerHtml: undefined,
+            tookMs: durationMs,
+            answerTokens,
+            answerChars,
+            chromePid: chrome.pid,
+            chromePort: chrome.port,
+            chromeHost,
+            userDataDir,
+            chromeTargetId: lastTargetId,
+            tabUrl: lastUrl,
+            controllerPid: process.pid,
+          };
+        }
         baselineTurns = submission.baselineTurns;
         baselineAssistantText = submission.baselineAssistantText;
       } catch (error) {
@@ -648,6 +683,29 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           usedPrompt = fallbackSubmission.prompt;
           usedAttachments = fallbackSubmission.attachments;
           const submission = await raceWithDisconnect(submitOnce(usedPrompt, usedAttachments));
+          if (submission.noSubmit) {
+            runStatus = 'complete';
+            answerText = '[no-submit] Prompt filled; not submitted.';
+            answerMarkdown = answerText;
+            const durationMs = Date.now() - startedAt;
+            const answerChars = answerText.length;
+            const answerTokens = estimateTokenCount(answerMarkdown);
+            return {
+              answerText,
+              answerMarkdown,
+              answerHtml: undefined,
+              tookMs: durationMs,
+              answerTokens,
+              answerChars,
+              chromePid: chrome.pid,
+              chromePort: chrome.port,
+              chromeHost,
+              userDataDir,
+              chromeTargetId: lastTargetId,
+              tabUrl: lastUrl,
+              controllerPid: process.pid,
+            };
+          }
           baselineTurns = submission.baselineTurns;
           baselineAssistantText = submission.baselineAssistantText;
         } else {
@@ -1215,11 +1273,13 @@ async function runRemoteBrowserMode(
     await ensureNotBlocked(Runtime, config.headless, logger);
     await ensureLoggedIn(Runtime, logger, { remoteSession: true });
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
+    await dismissBlockingUi(Runtime, logger).catch(() => false);
     logger(`Prompt textarea ready (initial focus, ${promptText.length.toLocaleString()} chars queued)`);
     const perplexityMode = config.perplexityMode ?? 'search';
     const isSearchMode = perplexityMode === 'search';
     await ensurePerplexityMode(Runtime, perplexityMode, logger);
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
+    await dismissBlockingUi(Runtime, logger).catch(() => false);
     if (!isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
       logger(`Perplexity sources/connectors ignored for mode=${perplexityMode} (search only).`);
     }
@@ -1291,7 +1351,11 @@ async function runRemoteBrowserMode(
       await ensurePerplexityThinking(Runtime, config.perplexityThinking, logger);
     }
 
-    const submitOnce = async (prompt: string, submissionAttachments: BrowserAttachment[]) => {
+    const submitOnce = async (
+      prompt: string,
+      submissionAttachments: BrowserAttachment[],
+    ): Promise<{ baselineTurns: number | null; baselineAssistantText: string | null; noSubmit: boolean }> => {
+      await dismissBlockingUi(Runtime, logger).catch(() => false);
       const baselineSnapshot = await readAssistantSnapshot(Runtime).catch(() => null);
       const baselineAssistantText =
         typeof baselineSnapshot?.text === 'string' ? baselineSnapshot.text.trim() : '';
@@ -1363,16 +1427,21 @@ async function runRemoteBrowserMode(
           attachmentNames: sendAttachmentNames,
           baselineTurns: baselineTurns ?? undefined,
           inputTimeoutMs: config.inputTimeoutMs ?? undefined,
+          noSubmit: config.noSubmit,
         },
         prompt,
         logger,
       );
+      if (config.noSubmit) {
+        logger('No-submit mode: prompt filled; skipping send + response wait.');
+        return { baselineTurns, baselineAssistantText, noSubmit: true };
+      }
       if (typeof committedTurns === 'number' && Number.isFinite(committedTurns)) {
         if (baselineTurns === null || committedTurns > baselineTurns) {
           baselineTurns = Math.max(0, committedTurns - 1);
         }
       }
-      return { baselineTurns, baselineAssistantText };
+      return { baselineTurns, baselineAssistantText, noSubmit: false };
     };
 
     let responseAttempt = 0;
@@ -1385,6 +1454,28 @@ async function runRemoteBrowserMode(
       let usedAttachments = currentAttachments;
       try {
         const submission = await submitOnce(usedPrompt, usedAttachments);
+        if (submission.noSubmit) {
+          answerText = '[no-submit] Prompt filled; not submitted.';
+          answerMarkdown = answerText;
+          const durationMs = Date.now() - startedAt;
+          const answerChars = answerText.length;
+          const answerTokens = estimateTokenCount(answerMarkdown);
+          return {
+            answerText,
+            answerMarkdown,
+            answerHtml: undefined,
+            tookMs: durationMs,
+            answerTokens,
+            answerChars,
+            chromePid: undefined,
+            chromePort: port,
+            chromeHost: host,
+            userDataDir: undefined,
+            chromeTargetId: remoteTargetId ?? undefined,
+            tabUrl: lastUrl,
+            controllerPid: process.pid,
+          };
+        }
         baselineTurns = submission.baselineTurns;
         baselineAssistantText = submission.baselineAssistantText;
       } catch (error) {
@@ -1398,6 +1489,28 @@ async function runRemoteBrowserMode(
           usedPrompt = options.fallbackSubmission.prompt;
           usedAttachments = options.fallbackSubmission.attachments;
           const submission = await submitOnce(usedPrompt, usedAttachments);
+          if (submission.noSubmit) {
+            answerText = '[no-submit] Prompt filled; not submitted.';
+            answerMarkdown = answerText;
+            const durationMs = Date.now() - startedAt;
+            const answerChars = answerText.length;
+            const answerTokens = estimateTokenCount(answerMarkdown);
+            return {
+              answerText,
+              answerMarkdown,
+              answerHtml: undefined,
+              tookMs: durationMs,
+              answerTokens,
+              answerChars,
+              chromePid: undefined,
+              chromePort: port,
+              chromeHost: host,
+              userDataDir: undefined,
+              chromeTargetId: remoteTargetId ?? undefined,
+              tabUrl: lastUrl,
+              controllerPid: process.pid,
+            };
+          }
           baselineTurns = submission.baselineTurns;
           baselineAssistantText = submission.baselineAssistantText;
         } else {

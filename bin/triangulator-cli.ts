@@ -131,6 +131,7 @@ interface CliOptions extends OptionValues {
   browserManualLoginProfileDir?: string;
   browserThinkingTime?: 'light' | 'standard' | 'extended' | 'heavy';
   browserAllowCookieErrors?: boolean;
+  browserNoSubmit?: boolean;
   browserAttachments?: string;
   browserInlineFiles?: boolean;
   browserBundleFiles?: boolean;
@@ -425,6 +426,12 @@ program
   .addOption(new Option('--browser-headless', 'Launch Chrome in headless mode.').hideHelp())
   .addOption(new Option('--browser-hide-window', 'Hide the Chrome window after launch (macOS headful only).').hideHelp())
   .addOption(new Option('--browser-keep-browser', 'Keep Chrome running after completion.').hideHelp())
+  .addOption(
+    new Option(
+      '--browser-no-submit',
+      'Fill the prompt/attachments but do not click send (useful for safe UI testing).',
+    ),
+  )
   .addOption(
     new Option(
       '--browser-model-strategy <mode>',
@@ -1450,6 +1457,7 @@ function printDebugHelp(cliName: string): void {
     ['--browser-headless', 'Launch Chrome in headless mode.'],
     ['--browser-hide-window', 'Hide the Chrome window (macOS headful only).'],
     ['--browser-keep-browser', 'Leave Chrome running after completion.'],
+    ['--browser-no-submit', 'Fill the prompt/attachments but do not click send.'],
   ]);
   console.log('');
   console.log(chalk.dim(`Tip: run \`${cliName} --help\` to see the primary option set.`));

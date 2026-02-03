@@ -29,6 +29,7 @@ export async function submitPrompt(
     attachmentNames?: string[];
     baselineTurns?: number | null;
     inputTimeoutMs?: number | null;
+    noSubmit?: boolean;
   },
   prompt: string,
   logger: BrowserLogger,
@@ -147,6 +148,11 @@ export async function submitPrompt(
       promptLength,
       observedLength,
     });
+  }
+
+  if (deps.noSubmit) {
+    logger('No-submit mode: prompt filled, not submitted.');
+    return deps.baselineTurns ?? null;
   }
 
   const clicked = await attemptSendButton(runtime, logger, deps?.attachmentNames);

@@ -62,6 +62,7 @@ export interface BrowserFlagOptions {
   browserManualLoginProfileDir?: string | null;
   /** Thinking time intensity: 'light', 'standard', 'extended', 'heavy' */
   browserThinkingTime?: ThinkingTimeLevel;
+  browserNoSubmit?: boolean;
   browserModelLabel?: string;
   browserModelStrategy?: BrowserModelStrategy;
   browserAllowCookieErrors?: boolean;
@@ -182,6 +183,7 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
     perplexityConnectors,
     skipFailedSources: options.skipFailedSources,
     modelFallback,
+    noSubmit: options.browserNoSubmit,
   };
 }
 

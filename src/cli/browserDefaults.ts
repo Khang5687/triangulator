@@ -21,6 +21,7 @@ export interface BrowserDefaultsOptions {
   browserThinkingTime?: ThinkingTimeLevel;
   browserManualLogin?: boolean;
   browserManualLoginProfileDir?: string | null;
+  browserNoSubmit?: boolean;
   perplexityMode?: string;
   perplexityThinking?: boolean;
   perplexityRecency?: string;
@@ -97,6 +98,12 @@ export function applyBrowserDefaultsFromConfig(
   }
   if (isUnset('browserManualLoginProfileDir') && browser.manualLoginProfileDir !== undefined) {
     options.browserManualLoginProfileDir = browser.manualLoginProfileDir;
+  }
+  if (isUnset('browserNoSubmit') && (browser as { noSubmit?: boolean }).noSubmit !== undefined) {
+    options.browserNoSubmit = (browser as { noSubmit?: boolean }).noSubmit;
+  }
+  if (isUnset('browserNoSubmit') && browserAny.no_submit !== undefined) {
+    options.browserNoSubmit = Boolean(browserAny.no_submit);
   }
   if (isUnset('perplexityMode') && browser.perplexityMode !== undefined) {
     options.perplexityMode = browser.perplexityMode ?? undefined;

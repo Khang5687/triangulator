@@ -2,6 +2,7 @@ export {
   navigateToPerplexity,
   navigateToPromptReadyWithFallback,
   ensureNotBlocked,
+  dismissBlockingUi,
   ensureLoggedIn,
   ensurePromptReady,
   installJavaScriptDialogAutoDismissal,

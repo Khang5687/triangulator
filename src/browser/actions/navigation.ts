@@ -75,7 +75,7 @@ export interface PromptReadyNavigationDeps {
   ensurePromptReady?: typeof ensurePromptReady;
 }
 
-async function dismissBlockingUi(Runtime: ChromeClient['Runtime'], logger: BrowserLogger): Promise<boolean> {
+export async function dismissBlockingUi(Runtime: ChromeClient['Runtime'], logger: BrowserLogger): Promise<boolean> {
   const outcome = await Runtime.evaluate({
     expression: `(() => {
       const isVisible = (el) => {
@@ -91,11 +91,22 @@ async function dismissBlockingUi(Runtime: ChromeClient['Runtime'], logger: Brows
       const labelFor = (el) => normalize(el?.textContent || el?.getAttribute?.('aria-label') || el?.getAttribute?.('title'));
       const buttonCandidates = (root) =>
         Array.from(root.querySelectorAll('button,[role="button"],a')).filter((el) => isVisible(el));
+      const hasUpgradeCopy = () => {
+        const text = normalize(document.body?.innerText || '');
+        return text.includes('upgrade for advanced research capabilities') || text.includes('upgrade for a broader search');
+      };
+      const findDialogRoot = () => {
+        const dialogs = Array.from(document.querySelectorAll('[role="dialog"],dialog,[aria-modal="true"]'));
+        if (dialogs.length > 0) return dialogs[dialogs.length - 1];
+        if (hasUpgradeCopy()) {
+          const candidates = Array.from(document.querySelectorAll('div,section,article'));
+          return candidates.find((el) => normalize(el.textContent || '').includes('upgrade for advanced research capabilities')) || null;
+        }
+        return null;
+      };
 
-      const roots = [
-        ...Array.from(document.querySelectorAll('[role="dialog"],dialog')),
-        document.body,
-      ].filter(Boolean);
+      const roots = [findDialogRoot(), ...Array.from(document.querySelectorAll('[role="dialog"],dialog')), document.body]
+        .filter(Boolean);
       for (const root of roots) {
         const buttons = buttonCandidates(root);
         const close = buttons.find((el) => labelFor(el).includes('close'));
@@ -121,6 +132,26 @@ async function dismissBlockingUi(Runtime: ChromeClient['Runtime'], logger: Brows
           (okLike).click();
           return { dismissed: true, action: 'confirm' };
         }
+        const upgradeDismiss = buttons.find((el) => {
+          const label = labelFor(el);
+          return (
+            label.includes('not now') ||
+            label.includes('no thanks') ||
+            label.includes('dismiss') ||
+            label.includes('skip') ||
+            label === 'x' ||
+            label === '×' ||
+            label.includes('close')
+          );
+        });
+        if (upgradeDismiss) {
+          (upgradeDismiss).click();
+          return { dismissed: true, action: 'upgrade-dismiss' };
+        }
+      }
+      if (hasUpgradeCopy()) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+        return { dismissed: true, action: 'escape' };
       }
       return { dismissed: false };
     })()`,

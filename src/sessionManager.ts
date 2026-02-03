@@ -54,6 +54,8 @@ export interface BrowserSessionConfig {
   skipFailedSources?: boolean;
   /** Optional model fallback. */
   modelFallback?: string | null;
+  /** Fill prompt + attachments but do not submit. */
+  noSubmit?: boolean;
 }
 
 export interface BrowserRuntimeMetadata {

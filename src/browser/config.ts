@@ -44,6 +44,7 @@ export const DEFAULT_BROWSER_CONFIG: ResolvedBrowserConfig = {
   perplexityConnectors: null,
   skipFailedSources: true,
   modelFallback: null,
+  noSubmit: false,
 };
 
 export function resolveBrowserConfig(config: BrowserAutomationConfig | undefined): ResolvedBrowserConfig {
@@ -117,6 +118,7 @@ export function resolveBrowserConfig(config: BrowserAutomationConfig | undefined
     perplexityConnectors: normalizedConnectors,
     skipFailedSources: config?.skipFailedSources ?? DEFAULT_BROWSER_CONFIG.skipFailedSources,
     modelFallback: config?.modelFallback ?? DEFAULT_BROWSER_CONFIG.modelFallback,
+    noSubmit: config?.noSubmit ?? DEFAULT_BROWSER_CONFIG.noSubmit,
   };
 }
 
