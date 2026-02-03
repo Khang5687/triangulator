@@ -34,7 +34,13 @@ async function connectBrowser(port: number) {
 async function getActivePage(port: number) {
   const browser = await connectBrowser(port);
   const pages = await browser.pages();
-  const page = pages.at(-1);
+  const page =
+    [...pages]
+      .reverse()
+      .find((candidate) => {
+        const url = candidate.url();
+        return !url.startsWith('chrome://') && !url.startsWith('chrome-untrusted://');
+      }) ?? pages.at(-1);
   if (!page) {
     await browser.disconnect();
     throw new Error('No active tab found');

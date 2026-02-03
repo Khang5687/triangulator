@@ -5,7 +5,6 @@ import type { BrowserLogger, ChromeClient, PerplexityMode, PerplexityRecency } f
 import {
   MENU_CONTAINER_SELECTOR,
   MENU_ITEM_SELECTOR,
-  PERPLEXITY_MODE_BUTTONS,
   PERPLEXITY_MODEL_BUTTON_SELECTOR,
   PERPLEXITY_RECENCY_BUTTON_SELECTOR,
   PERPLEXITY_SOURCES_BUTTON_SELECTOR,
@@ -151,18 +150,16 @@ export async function ensurePerplexityThinking(
 }
 
 function buildModeSelectionExpression(mode: PerplexityMode): string {
-  const selectorMap = JSON.stringify(PERPLEXITY_MODE_BUTTONS);
   const modeLiteral = JSON.stringify(mode);
   return `(async () => {
     ${buildClickDispatcher()}
-    const SELECTORS = ${selectorMap};
-    const target = SELECTORS[${modeLiteral}];
     const normalize = (value) => (value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
     const wantedLabels = {
       search: ['search'],
       deep_research: ['deep research', 'research'],
       create_files: ['create files and apps', 'create files', 'create', 'labs', 'apps'],
     };
+    const allWanted = Object.values(wantedLabels).flat();
     const getLabel = (node) => {
       if (!node) return '';
       return (
@@ -186,38 +183,68 @@ function buildModeSelectionExpression(mode: PerplexityMode): string {
       return active ? getLabel(active) : null;
     };
     const desired = wantedLabels[${modeLiteral}] || [${modeLiteral}];
+    const findGroup = () => {
+      const candidates = Array.from(document.querySelectorAll('button, [role="radio"], [role="tab"]'));
+      const labelMatchesAny = (node) => {
+        const label = normalize(getLabel(node));
+        return allWanted.some((entry) => label.includes(entry));
+      };
+      const modeCandidates = candidates.filter(labelMatchesAny);
+      const best = { node: null, matchCount: 0, totalCount: Infinity };
+      for (const node of modeCandidates) {
+        let parent = node.parentElement;
+        for (let depth = 0; depth < 5 && parent; depth += 1) {
+          const groupNodes = Array.from(parent.querySelectorAll('button, [role="radio"], [role="tab"]'));
+          const labels = new Set(
+            groupNodes
+              .map((child) => normalize(getLabel(child)))
+              .filter((label) => allWanted.some((entry) => label.includes(entry))),
+          );
+          const matchCount = labels.size;
+          const totalCount = groupNodes.length;
+          if (matchCount > best.matchCount || (matchCount === best.matchCount && totalCount < best.totalCount)) {
+            best.node = parent;
+            best.matchCount = matchCount;
+            best.totalCount = totalCount;
+          }
+          parent = parent.parentElement;
+        }
+      }
+      return best.node;
+    };
     const findButton = () => {
-      const direct = target ? document.querySelector(target) : null;
-      if (direct) return direct;
-      const radioCandidates = Array.from(
-        document.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"]'),
-      );
+      const group = findGroup();
+      const scope = group || document;
+      const candidates = Array.from(scope.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"], button'));
       const labelMatches = (node) => {
         const label = normalize(getLabel(node));
         return desired.some((entry) => label.includes(entry));
       };
-      const preferred = radioCandidates.filter((node) => (node.className || '').includes('segmented-control'));
-      const preferredMatch = preferred.find(labelMatches);
-      if (preferredMatch) return preferredMatch;
-      const modeSet = new Set(['search', 'deep research', 'create files and apps']);
-      const grouped = new Map();
-      for (const node of radioCandidates) {
-        const parent = node.closest('div') || node.parentElement || null;
-        if (!parent) continue;
-        const label = normalize(getLabel(node));
-        if (!modeSet.has(label)) continue;
-        const key = parent;
-        if (!grouped.has(key)) grouped.set(key, new Set());
-        grouped.get(key).add(label);
-      }
-      for (const [parent, labels] of grouped.entries()) {
-        if (labels.size >= 2) {
-          const scoped = Array.from(parent.querySelectorAll('button[role="radio"], [role="radio"], [role="tab"]'));
-          const scopedMatch = scoped.find(labelMatches);
-          if (scopedMatch) return scopedMatch;
+      const exactMatch = candidates.find((node) => normalize(getLabel(node)) === desired[0]);
+      if (exactMatch) return exactMatch;
+      const radioMatch = candidates.find((node) => labelMatches(node) && node.getAttribute?.('role') === 'radio');
+      if (radioMatch) return radioMatch;
+      return candidates.find(labelMatches) || null;
+    };
+    const waitForStableSelection = async () => {
+      const stableThreshold = 3;
+      const pollMs = 200;
+      const deadline = Date.now() + 2000;
+      let stableCount = 0;
+      while (Date.now() < deadline) {
+        const current = normalize(currentActiveLabel() || '');
+        const matched = desired.some((entry) => current.includes(entry));
+        if (matched) {
+          stableCount += 1;
+          if (stableCount >= stableThreshold) {
+            return currentActiveLabel();
+          }
+        } else {
+          stableCount = 0;
         }
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
       }
-      return radioCandidates.find(labelMatches) || null;
+      return currentActiveLabel();
     };
     let button = findButton();
     if (!button) {
@@ -241,7 +268,15 @@ function buildModeSelectionExpression(mode: PerplexityMode): string {
     }
     const label = getLabel(button) || ${modeLiteral};
     const checked = isChecked(button);
-    if (checked) return { status: 'already-selected', label, activeLabel: currentActiveLabel() || label };
+    if (checked) {
+      const stableLabel = await waitForStableSelection();
+      const normalizedStable = normalize(stableLabel || '');
+      const stillMatched = desired.some((entry) => normalizedStable.includes(entry));
+      if (!stillMatched) {
+        return { status: 'missing', debug: { url: location.href, labels: desired, active: stableLabel } };
+      }
+      return { status: 'already-selected', label, activeLabel: stableLabel || label };
+    }
     if (typeof button.scrollIntoView === 'function') {
       button.scrollIntoView({ block: 'center', inline: 'center' });
     }
@@ -249,22 +284,22 @@ function buildModeSelectionExpression(mode: PerplexityMode): string {
     if (typeof button.click === 'function') {
       button.click();
     }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    let after = currentActiveLabel();
-    let normalizedAfter = normalize(after || '');
-    let matched = desired.some((entry) => normalizedAfter.includes(entry));
+    let stableLabel = await waitForStableSelection();
+    let normalizedStable = normalize(stableLabel || '');
+    let matched = desired.some((entry) => normalizedStable.includes(entry));
     if (!matched) {
-      return { status: 'missing', debug: { url: location.href, labels: desired, active: after } };
+      dispatchClickSequence(button);
+      if (typeof button.click === 'function') {
+        button.click();
+      }
+      stableLabel = await waitForStableSelection();
+      normalizedStable = normalize(stableLabel || '');
+      matched = desired.some((entry) => normalizedStable.includes(entry));
     }
-    // Guard: Perplexity can re-render after mode click; wait briefly and re-validate.
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    after = currentActiveLabel();
-    normalizedAfter = normalize(after || '');
-    matched = desired.some((entry) => normalizedAfter.includes(entry));
     if (!matched) {
-      return { status: 'missing', debug: { url: location.href, labels: desired, active: after } };
+      return { status: 'missing', debug: { url: location.href, labels: desired, active: stableLabel } };
     }
-    return { status: 'selected', label, activeLabel: after };
+    return { status: 'selected', label, activeLabel: stableLabel };
   })()`;
 }
 
