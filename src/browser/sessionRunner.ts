@@ -8,6 +8,7 @@ import type { BrowserRunResult } from '../browserMode.js';
 import { assembleBrowserPrompt } from './prompt.js';
 import { BrowserAutomationError } from '../oracle/errors.js';
 import type { BrowserLogger } from './types.js';
+import { formatBrowserRunLabel } from './runLabel.js';
 
 export interface BrowserExecutionResult {
   usage: {
@@ -67,7 +68,8 @@ export async function runBrowserSessionExecution(
   if (promptArtifacts.bundled) {
     log(chalk.dim(`Packed ${promptArtifacts.bundled.originalCount} files into 1 bundle (contents counted in token estimate).`));
   }
-  const headerLine = `Launching browser mode (${runOptions.model}) with ~${promptArtifacts.estimatedInputTokens.toLocaleString()} tokens.`;
+  const { modelLabel, detailLabel } = formatBrowserRunLabel(runOptions.model, browserConfig);
+  const headerLine = `Launching browser mode (${modelLabel}) with ~${promptArtifacts.estimatedInputTokens.toLocaleString()} tokens.`;
   const automationLogger: BrowserLogger = ((message?: string) => {
     if (typeof message !== 'string') return;
     const shouldAlwaysPrint =
@@ -79,6 +81,9 @@ export async function runBrowserSessionExecution(
   automationLogger.sessionLog = runOptions.verbose ? log : (() => {});
 
   log(headerLine);
+  if (detailLabel) {
+    log(chalk.dim(`Perplexity: ${detailLabel}`));
+  }
   log(chalk.dim('This run can take up to an hour (usually ~10 minutes).'));
   if (runOptions.verbose) {
     log(chalk.dim('Chrome automation does not stream output; this may take a minute...'));
@@ -134,7 +139,7 @@ export async function runBrowserSessionExecution(
   })();
   const { line1, line2 } = formatFinishLine({
     elapsedMs: browserResult.tookMs,
-    model: `${runOptions.model}[browser]`,
+    model: `${modelLabel}[browser]`,
     tokensPart,
     detailParts: [runOptions.file && runOptions.file.length > 0 ? `files=${runOptions.file.length}` : null],
   });

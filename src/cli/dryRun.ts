@@ -15,6 +15,7 @@ import { assembleBrowserPrompt, type BrowserPromptArtifacts } from '../browser/p
 import type { BrowserAttachment } from '../browser/types.js';
 import type { BrowserSessionConfig } from '../sessionStore.js';
 import { buildTokenEstimateSuffix, formatAttachmentLabel } from '../browser/promptSummary.js';
+import { formatBrowserRunLabel } from '../browser/runLabel.js';
 import { buildCookiePlan } from '../browser/policies.js';
 
 interface DryRunDeps {
@@ -109,8 +110,12 @@ async function runBrowserDryRun(
   const assemblePromptImpl = deps.assembleBrowserPromptImpl ?? assembleBrowserPrompt;
   const artifacts = await assemblePromptImpl(runOptions, { cwd });
   const suffix = buildTokenEstimateSuffix(artifacts);
-  const headerLine = `[dry-run] Triangulator (${version}) would launch browser mode (${runOptions.model}) with ~${artifacts.estimatedInputTokens.toLocaleString()} tokens${suffix}.`;
+  const { modelLabel, detailLabel } = formatBrowserRunLabel(runOptions.model, browserConfig);
+  const headerLine = `[dry-run] Triangulator (${version}) would launch browser mode (${modelLabel}) with ~${artifacts.estimatedInputTokens.toLocaleString()} tokens${suffix}.`;
   log(chalk.cyan(headerLine));
+  if (detailLabel) {
+    log(chalk.dim(`[dry-run] Perplexity: ${detailLabel}`));
+  }
   logBrowserCookieStrategy(browserConfig, log, 'dry-run');
   logBrowserFileSummary(artifacts, log, 'dry-run');
 }
@@ -168,8 +173,12 @@ export async function runBrowserPreview(
   const assemblePromptImpl = deps.assembleBrowserPromptImpl ?? assembleBrowserPrompt;
   const artifacts = await assemblePromptImpl(runOptions, { cwd });
   const suffix = buildTokenEstimateSuffix(artifacts);
-  const headerLine = `[preview] Triangulator (${version}) browser mode (${runOptions.model}) with ~${artifacts.estimatedInputTokens.toLocaleString()} tokens${suffix}.`;
+  const { modelLabel, detailLabel } = formatBrowserRunLabel(runOptions.model, undefined);
+  const headerLine = `[preview] Triangulator (${version}) browser mode (${modelLabel}) with ~${artifacts.estimatedInputTokens.toLocaleString()} tokens${suffix}.`;
   log(chalk.cyan(headerLine));
+  if (detailLabel) {
+    log(chalk.dim(`[preview] Perplexity: ${detailLabel}`));
+  }
   logBrowserFileSummary(artifacts, log, 'preview');
   if (previewMode === 'json' || previewMode === 'full') {
     const attachmentSummary = artifacts.attachments.map((attachment) => ({
