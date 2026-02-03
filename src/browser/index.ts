@@ -22,9 +22,15 @@ import {
   ensureLoggedIn,
   ensurePromptReady,
   ensurePerplexityMode,
+  stabilizePerplexityMode,
+  installPerplexityModeGuard,
+  stopPerplexityModeGuard,
   ensurePerplexityRecency,
   ensurePerplexitySources,
   ensurePerplexityThinking,
+  installPerplexityModeWatch,
+  recordPerplexityModeSnapshot,
+  dumpPerplexityModeWatch,
   installJavaScriptDialogAutoDismissal,
   ensureModelSelection,
   submitPrompt,
@@ -377,7 +383,18 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     logger(`Prompt textarea ready (initial focus, ${promptText.length.toLocaleString()} chars queued)`);
     const perplexityMode = config.perplexityMode ?? 'search';
     const isSearchMode = perplexityMode === 'search';
+    const isPerplexityHost = (config.url ?? '').includes('perplexity.ai');
+    const modeWatchEnabled = process.env.TRIANGULATOR_MODE_WATCH === '1';
+    const modeWatchLogEnabled = process.env.TRIANGULATOR_MODE_WATCH_LOG === '1';
+    if (modeWatchEnabled) {
+      await raceWithDisconnect(installPerplexityModeWatch(Runtime, logger));
+      await raceWithDisconnect(recordPerplexityModeSnapshot(Runtime, 'after-prompt-ready'));
+    }
     await raceWithDisconnect(ensurePerplexityMode(Runtime, perplexityMode, logger));
+    await raceWithDisconnect(stabilizePerplexityMode(Runtime, perplexityMode, logger, 1500));
+    if (modeWatchEnabled) {
+      await raceWithDisconnect(recordPerplexityModeSnapshot(Runtime, 'after-mode'));
+    }
     await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
     await raceWithDisconnect(dismissBlockingUi(Runtime, logger).catch(() => false));
     if (config.perplexitySources || config.perplexityConnectors) {
@@ -388,11 +405,24 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           skipFailedSources: config.skipFailedSources,
         }),
       );
+      if (modeWatchEnabled) {
+        await raceWithDisconnect(recordPerplexityModeSnapshot(Runtime, 'after-sources'));
+      }
     }
     if (config.perplexityRecency) {
       await raceWithDisconnect(ensurePerplexityRecency(Runtime, config.perplexityRecency, logger));
+      if (modeWatchEnabled) {
+        await raceWithDisconnect(recordPerplexityModeSnapshot(Runtime, 'after-recency'));
+      }
     }
     await raceWithDisconnect(ensurePerplexityMode(Runtime, perplexityMode, logger));
+    await raceWithDisconnect(stabilizePerplexityMode(Runtime, perplexityMode, logger, 3000));
+    if (modeWatchEnabled) {
+      await raceWithDisconnect(recordPerplexityModeSnapshot(Runtime, 'after-mode-reassert'));
+    }
+    if (isPerplexityHost) {
+      await raceWithDisconnect(installPerplexityModeGuard(Runtime, perplexityMode, logger, 20_000));
+    }
     const captureRuntimeSnapshot = async () => {
       try {
         if (client?.Target?.getTargetInfo) {
@@ -621,7 +651,10 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
             throw error;
           }
           if (isPerplexity) {
-            await ensurePerplexityMode(Runtime, perplexityMode, logger);
+            await stabilizePerplexityMode(Runtime, perplexityMode, logger);
+          }
+          if (modeWatchEnabled) {
+            await recordPerplexityModeSnapshot(Runtime, 'after-attachments');
           }
           break;
         }
@@ -637,14 +670,39 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           baselineTurns: baselineTurns ?? undefined,
           inputTimeoutMs: config.inputTimeoutMs ?? undefined,
           noSubmit: config.noSubmit,
+          afterFocus: isPerplexity
+            ? async () => {
+                await stabilizePerplexityMode(Runtime, perplexityMode, logger, 3000);
+                if (modeWatchEnabled) {
+                  await recordPerplexityModeSnapshot(Runtime, 'after-focus');
+                }
+              }
+            : undefined,
+          beforeSubmit: isPerplexity
+            ? async () => {
+                await stabilizePerplexityMode(Runtime, perplexityMode, logger, 3000);
+                if (modeWatchEnabled) {
+                  await recordPerplexityModeSnapshot(Runtime, 'before-submit');
+                }
+              }
+            : undefined,
         },
         prompt,
         logger,
       );
       if (isPerplexity) {
-        await ensurePerplexityMode(Runtime, perplexityMode, logger);
+        await stabilizePerplexityMode(Runtime, perplexityMode, logger);
+      }
+      if (modeWatchEnabled) {
+        await recordPerplexityModeSnapshot(Runtime, 'after-submit');
       }
       if (config.noSubmit) {
+        if (modeWatchLogEnabled) {
+          await dumpPerplexityModeWatch(Runtime, logger);
+        }
+        if (isPerplexity) {
+          await stopPerplexityModeGuard(Runtime);
+        }
         logger('No-submit mode: prompt filled; skipping send + response wait.');
         return {
           baselineTurns,
@@ -682,6 +740,12 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       scheduleConversationHint('post-submit', config.timeoutMs ?? 120_000);
       if (submissionAttachments.length > 0 && attachmentUiConfirmed && (inputOnlyAttachments || attachmentWaitTimedOut)) {
         attachmentUiConfirmed = false;
+      }
+      if (modeWatchLogEnabled) {
+        await dumpPerplexityModeWatch(Runtime, logger);
+      }
+      if (isPerplexity) {
+        await stopPerplexityModeGuard(Runtime);
       }
       return {
         baselineTurns,
@@ -1387,7 +1451,17 @@ async function runRemoteBrowserMode(
     const perplexityMode = config.perplexityMode ?? 'search';
     const isPerplexity = (config.url ?? '').includes('perplexity.ai');
     const isSearchMode = perplexityMode === 'search';
+    const modeWatchEnabled = process.env.TRIANGULATOR_MODE_WATCH === '1';
+    const modeWatchLogEnabled = process.env.TRIANGULATOR_MODE_WATCH_LOG === '1';
+    if (modeWatchEnabled) {
+      await installPerplexityModeWatch(Runtime, logger);
+      await recordPerplexityModeSnapshot(Runtime, 'after-prompt-ready');
+    }
     await ensurePerplexityMode(Runtime, perplexityMode, logger);
+    await stabilizePerplexityMode(Runtime, perplexityMode, logger, 1500);
+    if (modeWatchEnabled) {
+      await recordPerplexityModeSnapshot(Runtime, 'after-mode');
+    }
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
     await dismissBlockingUi(Runtime, logger).catch(() => false);
     if (config.perplexitySources || config.perplexityConnectors) {
@@ -1396,11 +1470,24 @@ async function runRemoteBrowserMode(
         connectors: config.perplexityConnectors ?? undefined,
         skipFailedSources: config.skipFailedSources,
       });
+      if (modeWatchEnabled) {
+        await recordPerplexityModeSnapshot(Runtime, 'after-sources');
+      }
     }
     if (config.perplexityRecency) {
       await ensurePerplexityRecency(Runtime, config.perplexityRecency, logger);
+      if (modeWatchEnabled) {
+        await recordPerplexityModeSnapshot(Runtime, 'after-recency');
+      }
     }
     await ensurePerplexityMode(Runtime, perplexityMode, logger);
+    await stabilizePerplexityMode(Runtime, perplexityMode, logger, 3000);
+    if (modeWatchEnabled) {
+      await recordPerplexityModeSnapshot(Runtime, 'after-mode-reassert');
+    }
+    if (isPerplexity) {
+      await installPerplexityModeGuard(Runtime, perplexityMode, logger, 20_000);
+    }
     try {
       const { result } = await Runtime.evaluate({
         expression: 'location.href',
@@ -1533,7 +1620,10 @@ async function runRemoteBrowserMode(
             throw error;
           }
           if (isPerplexity) {
-            await ensurePerplexityMode(Runtime, perplexityMode, logger);
+            await stabilizePerplexityMode(Runtime, perplexityMode, logger);
+          }
+          if (modeWatchEnabled) {
+            await recordPerplexityModeSnapshot(Runtime, 'after-attachments');
           }
           break;
         }
@@ -1548,14 +1638,39 @@ async function runRemoteBrowserMode(
           baselineTurns: baselineTurns ?? undefined,
           inputTimeoutMs: config.inputTimeoutMs ?? undefined,
           noSubmit: config.noSubmit,
+          afterFocus: isPerplexity
+            ? async () => {
+                await stabilizePerplexityMode(Runtime, perplexityMode, logger, 3000);
+                if (modeWatchEnabled) {
+                  await recordPerplexityModeSnapshot(Runtime, 'after-focus');
+                }
+              }
+            : undefined,
+          beforeSubmit: isPerplexity
+            ? async () => {
+                await stabilizePerplexityMode(Runtime, perplexityMode, logger, 3000);
+                if (modeWatchEnabled) {
+                  await recordPerplexityModeSnapshot(Runtime, 'before-submit');
+                }
+              }
+            : undefined,
         },
         prompt,
         logger,
       );
       if (isPerplexity) {
-        await ensurePerplexityMode(Runtime, perplexityMode, logger);
+        await stabilizePerplexityMode(Runtime, perplexityMode, logger);
+      }
+      if (modeWatchEnabled) {
+        await recordPerplexityModeSnapshot(Runtime, 'after-submit');
       }
       if (config.noSubmit) {
+        if (modeWatchLogEnabled) {
+          await dumpPerplexityModeWatch(Runtime, logger);
+        }
+        if (isPerplexity) {
+          await stopPerplexityModeGuard(Runtime);
+        }
         logger('No-submit mode: prompt filled; skipping send + response wait.');
         return {
           baselineTurns,
@@ -1574,6 +1689,12 @@ async function runRemoteBrowserMode(
       }
       if (submissionAttachments.length > 0 && attachmentUiConfirmed && attachmentWaitTimedOut) {
         attachmentUiConfirmed = false;
+      }
+      if (modeWatchLogEnabled) {
+        await dumpPerplexityModeWatch(Runtime, logger);
+      }
+      if (isPerplexity) {
+        await stopPerplexityModeGuard(Runtime);
       }
       return {
         baselineTurns,
