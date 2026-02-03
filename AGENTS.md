@@ -24,5 +24,18 @@ Browser-mode debug notes (Perplexity URL override)
 - Active Chrome port/pid live in session metadata (`~/.triangulator/sessions/<id>/meta.json`). Connect with `npx tsx scripts/browser-tools.ts eval --port <port> "({ href: window.location.href, ready: document.readyState })"` to inspect the page.
 - To debug with agent-tools, launch Chrome via a Triangulator browser run (cookies copied) and keep it open (`--browser-keep-browser`). Then use `~/Projects/agent-scripts/bin/browser-tools ... --port <port>` with the port from `~/.triangulator/sessions/<id>/meta.json`. Avoid starting a fresh browser-tools Chrome when you need the synced cookies.
 - Double-hop nav is implemented (root then target URL), but Cloudflare may still need manual clearance or inline cookies.
+- Browser-tools automation workflow (preferred for manual UI probing with cookies):
+  - Start Chrome with a copied profile to reuse Perplexity cookies:
+    - `pnpm tsx scripts/browser-tools.ts start --profile --profile-dir /tmp/triangulator-chrome --port 9222`
+  - Open the Space URL in a new tab:
+    - `pnpm tsx scripts/browser-tools.ts nav --port 9222 --new "<space-url>"`
+  - Inspect current tabs/ports (find the Space tab + active port):
+    - `pnpm tsx scripts/browser-tools.ts inspect --ports 9222 --json`
+  - Query DOM state or click elements via JS:
+    - `pnpm tsx scripts/browser-tools.ts eval --port 9222 "<js-snippet>"`
+  - For element discovery, use the picker:
+    - `pnpm tsx scripts/browser-tools.ts pick --port 9222 "Click target element"`
+  - Clean up stray instances:
+    - `pnpm tsx scripts/browser-tools.ts kill --ports 9222 --force`
 - After finishing a feature, ask whether it matters to end users; if yes, update the changelog. Read the top ~100 lines first and group related edits into one entry instead of scattering multiple bullets.
 - Beta publishing: when asked to ship a beta to npm, bump the version with a beta suffix (e.g., `0.4.4-beta.1`) before publishing; npm will not let you overwrite an existing beta tag without a new version.
