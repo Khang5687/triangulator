@@ -725,35 +725,6 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           attachmentNetworkMonitor = null;
         }
       };
-      let attachmentUiConfirmed = true;
-      let attachmentWaitTimedOut = false;
-      let inputOnlyAttachments = false;
-      let userTurnVerified: boolean | null = null;
-      let attachmentNetworkResult: AttachmentNetworkResult | null = null;
-      let attachmentNetworkMonitor: ReturnType<typeof startAttachmentNetworkMonitor> | null = null;
-      const startNetworkMonitor = () => {
-        if (!Network || usedAttachments.length === 0) return;
-        attachmentNetworkMonitor = startAttachmentNetworkMonitor(Network, {
-          attachmentNames: usedAttachments.map((entry) => entry.path),
-          logger,
-          allowedHosts: attachmentMonitorHosts,
-        });
-      };
-      const stopNetworkMonitor = async () => {
-        if (!attachmentNetworkMonitor) return null;
-        try {
-          return await attachmentNetworkMonitor.stop();
-        } catch (error) {
-          if (logger.verbose) {
-            logger(
-              `Attachment network monitor stop failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-          return null;
-        } finally {
-          attachmentNetworkMonitor = null;
-        }
-      };
       try {
         startNetworkMonitor();
         const submission = await raceWithDisconnect(submitOnce(usedPrompt, usedAttachments));
@@ -1609,6 +1580,35 @@ async function runRemoteBrowserMode(
       let baselineAssistantText: string | null = null;
       let usedPrompt = currentPrompt;
       let usedAttachments = currentAttachments;
+      let attachmentUiConfirmed = true;
+      let attachmentWaitTimedOut = false;
+      let inputOnlyAttachments = false;
+      let userTurnVerified: boolean | null = null;
+      let attachmentNetworkResult: AttachmentNetworkResult | null = null;
+      let attachmentNetworkMonitor: ReturnType<typeof startAttachmentNetworkMonitor> | null = null;
+      const startNetworkMonitor = () => {
+        if (!Network || usedAttachments.length === 0) return;
+        attachmentNetworkMonitor = startAttachmentNetworkMonitor(Network, {
+          attachmentNames: usedAttachments.map((entry) => entry.path),
+          logger,
+          allowedHosts: attachmentMonitorHosts,
+        });
+      };
+      const stopNetworkMonitor = async () => {
+        if (!attachmentNetworkMonitor) return null;
+        try {
+          return await attachmentNetworkMonitor.stop();
+        } catch (error) {
+          if (logger.verbose) {
+            logger(
+              `Attachment network monitor stop failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          return null;
+        } finally {
+          attachmentNetworkMonitor = null;
+        }
+      };
       try {
         startNetworkMonitor();
         const submission = await submitOnce(usedPrompt, usedAttachments);
@@ -1831,15 +1831,15 @@ async function runRemoteBrowserMode(
           }
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
-      if (bestText) {
-        logger('Recovered assistant response after detecting prompt echo');
-        answerText = bestText;
-        answerMarkdown = bestText;
+        if (bestText) {
+          logger('Recovered assistant response after detecting prompt echo');
+          answerText = bestText;
+          answerMarkdown = bestText;
+        }
       }
-    }
-    stopThinkingMonitor?.();
-    attachmentNetworkResult = await stopNetworkMonitor();
-    const retryPlan = planAttachmentResponseRetry({
+      stopThinkingMonitor?.();
+      attachmentNetworkResult = await stopNetworkMonitor();
+      const retryPlan = planAttachmentResponseRetry({
       answerText,
       attachments: usedAttachments,
       attempt: responseAttempt,
