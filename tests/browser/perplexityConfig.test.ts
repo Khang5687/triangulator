@@ -33,8 +33,8 @@ describe('perplexityConfig', () => {
   });
 
   it('normalizes sources/connectors', () => {
-    expect(normalizePerplexitySources('web, academic, social')).toEqual(['web', 'academic', 'social']);
-    expect(normalizePerplexitySources('web,unknown')).toEqual(['web']);
+    expect(normalizePerplexitySources('web, academic, social')).toEqual(['academic', 'social']);
+    expect(normalizePerplexitySources('web,unknown')).toBeNull();
     expect(normalizePerplexityConnectors('GitHub,asana')).toEqual(['github', 'asana']);
   });
 

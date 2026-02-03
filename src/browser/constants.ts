@@ -101,4 +101,5 @@ export const PERPLEXITY_RECENCY_BUTTON_SELECTOR =
   'button[aria-label="Set recency for web search"], ' +
   'button[aria-label*="recency"], button[aria-label*="Recency"], button[title*="recency"], button[title*="Recency"]';
 export const PERPLEXITY_SOURCES_BUTTON_SELECTOR =
-  'button[aria-label="Sources"], button[aria-label*="Sources"], button[title*="Sources"], button[data-testid*="sources"]';
+  'button[aria-label="Sources"], button[aria-label*="Sources"], button[aria-label*="Source"], ' +
+  'button[title*="Sources"], button[title*="Source"], button[data-testid*="sources"], button[data-testid*="source"]';

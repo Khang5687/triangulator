@@ -61,7 +61,8 @@ export function normalizePerplexitySources(input?: string[] | string | null): st
       if (entry.startsWith('social')) return 'social';
       return '';
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((entry) => entry !== 'web');
   return mapped.length ? Array.from(new Set(mapped)) : null;
 }
 

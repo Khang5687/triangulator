@@ -357,10 +357,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     await raceWithDisconnect(ensurePerplexityMode(Runtime, perplexityMode, logger));
     await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
     await raceWithDisconnect(dismissBlockingUi(Runtime, logger).catch(() => false));
-    if (!isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
-      logger(`Perplexity sources/connectors ignored for mode=${perplexityMode} (search only).`);
-    }
-    if (isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
+    if (config.perplexitySources || config.perplexityConnectors) {
       await raceWithDisconnect(
         ensurePerplexitySources(Runtime, logger, {
           sources: config.perplexitySources ?? undefined,
@@ -369,10 +366,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         }),
       );
     }
-    if (!isSearchMode && config.perplexityRecency) {
-      logger(`Perplexity recency ignored for mode=${perplexityMode} (search only).`);
-    }
-    if (isSearchMode && config.perplexityRecency) {
+    if (config.perplexityRecency) {
       await raceWithDisconnect(ensurePerplexityRecency(Runtime, config.perplexityRecency, logger));
     }
     const captureRuntimeSnapshot = async () => {
@@ -1280,20 +1274,14 @@ async function runRemoteBrowserMode(
     await ensurePerplexityMode(Runtime, perplexityMode, logger);
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
     await dismissBlockingUi(Runtime, logger).catch(() => false);
-    if (!isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
-      logger(`Perplexity sources/connectors ignored for mode=${perplexityMode} (search only).`);
-    }
-    if (isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
+    if (config.perplexitySources || config.perplexityConnectors) {
       await ensurePerplexitySources(Runtime, logger, {
         sources: config.perplexitySources ?? undefined,
         connectors: config.perplexityConnectors ?? undefined,
         skipFailedSources: config.skipFailedSources,
       });
     }
-    if (!isSearchMode && config.perplexityRecency) {
-      logger(`Perplexity recency ignored for mode=${perplexityMode} (search only).`);
-    }
-    if (isSearchMode && config.perplexityRecency) {
+    if (config.perplexityRecency) {
       await ensurePerplexityRecency(Runtime, config.perplexityRecency, logger);
     }
     try {

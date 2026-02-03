@@ -64,9 +64,13 @@ export async function ensurePerplexityRecency(
     });
     const result = outcome.result?.value as
       | { status: 'selected' | 'already-selected'; label: string }
-      | { status: 'menu-missing' | 'option-missing' | 'button-missing' };
+      | { status: 'menu-missing' | 'option-missing' | 'button-missing' | 'unsupported' };
     if (result && (result.status === 'selected' || result.status === 'already-selected')) {
       logger(`Recency: ${result.label}`);
+      return;
+    }
+    if (result?.status === 'unsupported') {
+      logger('Recency: control not available; skipping.');
       return;
     }
     await delay(250);
@@ -84,7 +88,7 @@ export async function ensurePerplexitySources(
     skipFailedSources?: boolean;
   },
 ) {
-  const sources = options.sources ?? [];
+  const sources = (options.sources ?? []).filter((source) => String(source).toLowerCase() !== 'web');
   const connectors = options.connectors ?? [];
   const targets = [...sources, ...connectors].filter(Boolean);
   if (targets.length === 0) {
@@ -96,13 +100,17 @@ export async function ensurePerplexitySources(
     returnByValue: true,
   });
   const result = outcome.result?.value as {
-    status: 'ok' | 'menu-missing' | 'button-missing';
+    status: 'ok' | 'menu-missing' | 'button-missing' | 'unsupported';
     missing?: string[];
     disabled?: string[];
     toggled?: string[];
     already?: string[];
     snapshot?: { sample: string; candidates: string[] };
   };
+  if (result?.status === 'unsupported') {
+    logger('Sources: control not available; skipping.');
+    return;
+  }
   if (!result || result.status !== 'ok') {
     await logDomFailure(Runtime, logger, 'perplexity-sources');
   }
@@ -320,21 +328,79 @@ function buildRecencySelectionExpression(recency: PerplexityRecency): string {
       year: 'Last Year',
     };
     const desiredLabel = labelMap[RECENCY];
-    const button = document.querySelector(BUTTON_SELECTOR);
-    if (!button) return { status: 'button-missing' };
-    dispatchClickSequence(button);
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    const normalize = (value) => (value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+    const normalize = (value) => (value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\\s+/g, ' ').trim();
+    const menuMatchesRecency = (menu) => {
+      if (!menu) return false;
+      const text = normalize(menu.innerText || '');
+      return Object.values(labelMap).some((label) => text.includes(normalize(label)));
+    };
+    const findMenu = () => {
+      const menus = Array.from(document.querySelectorAll('${MENU_CONTAINER_SELECTOR}'));
+      return menus.length ? menus[menus.length - 1] : null;
+    };
+    const closeMenus = () => {
+      document.body?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    };
+    const openMenu = async (node) => {
+      if (!node) return null;
+      dispatchClickSequence(node);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      let menu = findMenu();
+      if (!menu) {
+        const deadline = performance.now() + 800;
+        while (!menu && performance.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          menu = findMenu();
+        }
+      }
+      if (menuMatchesRecency(menu)) return menu;
+      closeMenus();
+      return null;
+    };
+    let button = document.querySelector(BUTTON_SELECTOR);
+    let menu = await openMenu(button);
+    if (!menu) {
+      const prompt = document.querySelector('[contenteditable="true"], textarea');
+      const scope = prompt?.closest('form') || prompt?.closest('section') || prompt?.parentElement || document;
+      const candidates = Array.from(scope.querySelectorAll('button')).filter((node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        if (node.hasAttribute('disabled')) return false;
+        const type = (node.getAttribute('type') || '').toLowerCase();
+        if (type === 'submit') return false;
+        const label = normalize(node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '');
+        if (label.includes('send') || label.includes('submit')) return false;
+        return true;
+      });
+      for (const candidate of candidates) {
+        if (candidate === button) continue;
+        menu = await openMenu(candidate);
+        if (menu) {
+          button = candidate;
+          break;
+        }
+      }
+    }
+    if (!button || !menu) return { status: 'unsupported' };
     const labelNorm = normalize(desiredLabel);
-    const items = Array.from(document.querySelectorAll(ITEM_SELECTOR));
+    const items = Array.from(menu.querySelectorAll(ITEM_SELECTOR));
     const match = items.find((node) => normalize(node.textContent) === labelNorm);
     if (!match) return { status: 'option-missing' };
+    const findClickable = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return null;
+      const clickableSelector = 'button, [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox]';
+      let clickable = node.closest(clickableSelector);
+      if (clickable) return clickable;
+      clickable = node.querySelector(clickableSelector);
+      if (clickable) return clickable;
+      return node;
+    };
+    const clickable = findClickable(match) ?? match;
     const checked =
-      match.getAttribute('aria-checked') === 'true' ||
-      match.getAttribute('aria-selected') === 'true' ||
-      match.getAttribute('data-state') === 'checked';
+      clickable.getAttribute('aria-checked') === 'true' ||
+      clickable.getAttribute('aria-selected') === 'true' ||
+      clickable.getAttribute('data-state') === 'checked';
     if (checked) return { status: 'already-selected', label: desiredLabel };
-    dispatchClickSequence(match);
+    dispatchClickSequence(clickable);
     return { status: 'selected', label: desiredLabel };
   })()`;
 }
@@ -347,11 +413,13 @@ function buildSourcesSelectionExpression(targets: string[]): string {
     ${buildClickDispatcher()}
     const BUTTON_SELECTOR = ${buttonSelector};
     const MENU_SELECTOR = ${menuSelector};
-    const targets = ${targetsLiteral}.map((t) => (t || '').trim()).filter(Boolean);
-    const button = document.querySelector(BUTTON_SELECTOR);
-    if (!button) return { status: 'button-missing', missing: targets };
-    dispatchClickSequence(button);
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    const targets = ${targetsLiteral}
+      .map((t) => (t || '').trim())
+      .filter(Boolean)
+      .filter((t) => (t || '').toLowerCase() !== 'web');
+    if (!targets.length) {
+      return { status: 'ok', missing: [], disabled: [], toggled: [], already: [] };
+    }
     const normalize = (value) => (value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\\s+/g, ' ').trim();
     const getLabel = (node) => {
       if (!node || !(node instanceof HTMLElement)) return '';
@@ -370,21 +438,84 @@ function buildSourcesSelectionExpression(targets: string[]): string {
     };
     const isSelected = (node) => {
       if (!node || !(node instanceof HTMLElement)) return false;
+      if (node instanceof HTMLInputElement) {
+        return Boolean(node.checked);
+      }
       const ariaChecked = node.getAttribute('aria-checked');
       const ariaSelected = node.getAttribute('aria-selected');
       const dataState = (node.getAttribute('data-state') || '').toLowerCase();
       return ariaChecked === 'true' || ariaSelected === 'true' || dataState === 'checked' || dataState === 'selected';
     };
+    const findClickable = (node) => {
+      if (!node || !(node instanceof HTMLElement)) return null;
+      const clickableSelector =
+        'button, [role=menuitemcheckbox], [role=menuitemradio], [role=menuitem], [role=checkbox], [role=switch], input[type=checkbox], input[type=radio]';
+      let clickable = node.closest(clickableSelector);
+      if (clickable) return clickable;
+      clickable = node.querySelector(clickableSelector);
+      if (clickable) return clickable;
+      let parent = node.parentElement;
+      for (let depth = 0; depth < 4 && parent; depth += 1) {
+        const candidate = parent.querySelector(clickableSelector);
+        if (candidate) return candidate;
+        parent = parent.parentElement;
+      }
+      return node;
+    };
     const findMenu = () => {
       const menus = Array.from(document.querySelectorAll(MENU_SELECTOR));
       return menus.length ? menus[menus.length - 1] : null;
     };
-    let menu = findMenu();
-    const menuDeadline = performance.now() + 1200;
-    while (!menu && performance.now() < menuDeadline) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      menu = findMenu();
+    const menuMatchesTargets = (menu) => {
+      if (!menu) return false;
+      const text = normalize(menu.innerText || '');
+      const hasTarget = targets.some((target) => text.includes(normalize(target)));
+      if (hasTarget) return true;
+      return ['web', 'academic', 'social', 'sources'].some((token) => text.includes(token));
+    };
+    const closeMenus = () => {
+      document.body?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    };
+    const openMenu = async (node) => {
+      if (!node) return null;
+      dispatchClickSequence(node);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      let menu = findMenu();
+      if (!menu) {
+        const deadline = performance.now() + 1200;
+        while (!menu && performance.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          menu = findMenu();
+        }
+      }
+      if (menuMatchesTargets(menu)) return menu;
+      closeMenus();
+      return null;
+    };
+    let button = document.querySelector(BUTTON_SELECTOR);
+    let menu = await openMenu(button);
+    if (!menu) {
+      const prompt = document.querySelector('[contenteditable="true"], textarea');
+      const scope = prompt?.closest('form') || prompt?.closest('section') || prompt?.parentElement || document;
+      const candidates = Array.from(scope.querySelectorAll('button')).filter((node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        if (node.hasAttribute('disabled')) return false;
+        const type = (node.getAttribute('type') || '').toLowerCase();
+        if (type === 'submit') return false;
+        const label = normalize(node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '');
+        if (label.includes('send') || label.includes('submit')) return false;
+        return true;
+      });
+      for (const candidate of candidates) {
+        if (candidate === button) continue;
+        menu = await openMenu(candidate);
+        if (menu) {
+          button = candidate;
+          break;
+        }
+      }
     }
+    if (!button || !menu) return { status: 'unsupported', missing: targets };
     const lookup = (root) => Array.from(
       root
         ? root.querySelectorAll('button, [role=menuitem], [role=menuitemcheckbox], label, div, span')
@@ -404,7 +535,7 @@ function buildSourcesSelectionExpression(targets: string[]): string {
         missing.push(target);
         continue;
       }
-      const node = match.node;
+      const node = findClickable(match.node) ?? match.node;
       if (isDisabled(node)) {
         disabled.push(target);
         continue;

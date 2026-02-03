@@ -40,6 +40,8 @@ describe('ensurePerplexityMode', () => {
   });
 
   test('throws when mode controls missing', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
     const runtime = {
       evaluate: vi
         .fn()
@@ -47,9 +49,10 @@ describe('ensurePerplexityMode', () => {
         .mockResolvedValue({ result: { value: null } }),
     } as unknown as ChromeClient['Runtime'];
 
-    await expect(ensurePerplexityMode(runtime, 'search', logger)).rejects.toThrow(
-      /Unable to locate Perplexity mode controls/i,
-    );
+    const promise = ensurePerplexityMode(runtime, 'search', logger);
+    const assertion = expect(promise).rejects.toThrow(/Unable to locate Perplexity mode controls/i);
+    await vi.advanceTimersByTimeAsync(8_000);
+    await assertion;
   });
 });
 
@@ -81,14 +84,14 @@ describe('ensurePerplexitySources', () => {
   test('logs when sources toggled', async () => {
     const runtime = {
       evaluate: vi.fn().mockResolvedValue({
-        result: { value: { status: 'ok', missing: [], disabled: [], toggled: ['web'], already: [] } },
+        result: { value: { status: 'ok', missing: [], disabled: [], toggled: ['academic'], already: [] } },
       }),
     } as unknown as ChromeClient['Runtime'];
 
     await expect(
-      ensurePerplexitySources(runtime, logger, { sources: ['web'], connectors: null }),
+      ensurePerplexitySources(runtime, logger, { sources: ['academic'], connectors: null }),
     ).resolves.toBeUndefined();
-    expect(logger).toHaveBeenCalledWith('Sources updated: web');
+    expect(logger).toHaveBeenCalledWith('Sources updated: academic');
   });
 
   test('logs and skips unavailable sources when skipFailedSources is true', async () => {
