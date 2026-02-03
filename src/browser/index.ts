@@ -41,6 +41,8 @@ import { uploadAttachmentViaDataTransfer } from './actions/remoteFileTransfer.js
 import { ensureThinkingTime } from './actions/thinkingTime.js';
 import { estimateTokenCount, withRetries, delay } from './utils.js';
 import { planAttachmentResponseRetry } from './attachmentRetry.js';
+import { startAttachmentNetworkMonitor } from './attachmentNetwork.js';
+import type { AttachmentNetworkResult } from './attachmentNetwork.js';
 import { formatElapsed } from '../oracle/format.js';
 import {
   PERPLEXITY_URL,
@@ -67,6 +69,27 @@ export { parseDuration, delay, normalizePerplexityUrl } from './utils.js';
 
 const MAX_ATTACHMENT_RETRIES = 2;
 const MAX_RESPONSE_PARSE_RETRIES = 1;
+const DEFAULT_PERPLEXITY_HOSTS = ['perplexity.ai', 'www.perplexity.ai'];
+
+const buildAllowedAttachmentHosts = (rawUrl?: string | null): string[] => {
+  const hosts = new Set<string>(DEFAULT_PERPLEXITY_HOSTS);
+  if (rawUrl) {
+    try {
+      const host = new URL(rawUrl).host.toLowerCase();
+      if (host) {
+        hosts.add(host);
+        if (host.startsWith('www.')) {
+          hosts.add(host.slice(4));
+        } else {
+          hosts.add(`www.${host}`);
+        }
+      }
+    } catch {
+      // ignore URL parsing errors
+    }
+  }
+  return Array.from(hosts);
+};
 
 function parseAttachmentFailure(
   error: unknown,
@@ -495,7 +518,15 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     const submitOnce = async (
       prompt: string,
       submissionAttachments: BrowserAttachment[],
-    ): Promise<{ baselineTurns: number | null; baselineAssistantText: string | null; noSubmit: boolean }> => {
+    ): Promise<{
+      baselineTurns: number | null;
+      baselineAssistantText: string | null;
+      noSubmit: boolean;
+      attachmentUiConfirmed: boolean;
+      attachmentWaitTimedOut: boolean;
+      inputOnlyAttachments: boolean;
+      userTurnVerified: boolean | null;
+    }> => {
       await dismissBlockingUi(Runtime, logger).catch(() => false);
       const baselineSnapshot = await readAssistantSnapshot(Runtime).catch(() => null);
       const baselineAssistantText =
@@ -504,6 +535,8 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       const isPerplexity = (config.url ?? '').includes('perplexity.ai');
       let attachmentWaitTimedOut = false;
       let inputOnlyAttachments = false;
+      let attachmentUiConfirmed = submissionAttachments.length === 0;
+      let userTurnVerified: boolean | null = null;
       if (submissionAttachments.length > 0) {
         if (!DOM) {
           throw new Error('Chrome DOM domain unavailable while uploading attachments.');
@@ -527,6 +560,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
               );
               if (!uiConfirmed) {
                 inputOnlyAttachments = true;
+                attachmentUiConfirmed = false;
               }
               await delay(500);
             } else {
@@ -541,6 +575,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
                 );
                 if (!uiConfirmed) {
                   inputOnlyAttachments = true;
+                  attachmentUiConfirmed = false;
                 }
                 await delay(500);
               }
@@ -552,6 +587,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
             try {
               await waitForAttachmentCompletion(Runtime, waitBudget, attachmentNames, logger);
               logger('All attachments uploaded');
+              attachmentUiConfirmed = true;
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               const failure = parseAttachmentFailure(error, submissionAttachments);
@@ -564,6 +600,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
               }
               if (/Attachments did not finish uploading before timeout/i.test(message)) {
                 attachmentWaitTimedOut = true;
+                attachmentUiConfirmed = false;
                 logger(
                   `[browser] Attachment upload timed out after ${Math.round(waitBudget / 1000)}s; continuing without confirmation.`,
                 );
@@ -602,7 +639,15 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       );
       if (config.noSubmit) {
         logger('No-submit mode: prompt filled; skipping send + response wait.');
-        return { baselineTurns, baselineAssistantText, noSubmit: true };
+        return {
+          baselineTurns,
+          baselineAssistantText,
+          noSubmit: true,
+          attachmentUiConfirmed,
+          attachmentWaitTimedOut,
+          inputOnlyAttachments,
+          userTurnVerified,
+        };
       }
       if (typeof committedTurns === 'number' && Number.isFinite(committedTurns)) {
         if (baselineTurns === null || committedTurns > baselineTurns) {
@@ -621,26 +666,99 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           if (!verified) {
             throw new Error('Sent user message did not expose attachment UI after upload.');
           }
+          userTurnVerified = verified;
           logger('Verified attachments present on sent user message');
         }
       }
       await maybeOpenPerplexityThread(Page, Runtime, prompt, logger);
       // Reattach needs a Spaces URL; it can update late, so poll in the background.
       scheduleConversationHint('post-submit', config.timeoutMs ?? 120_000);
-      return { baselineTurns, baselineAssistantText, noSubmit: false };
+      if (submissionAttachments.length > 0 && attachmentUiConfirmed && (inputOnlyAttachments || attachmentWaitTimedOut)) {
+        attachmentUiConfirmed = false;
+      }
+      return {
+        baselineTurns,
+        baselineAssistantText,
+        noSubmit: false,
+        attachmentUiConfirmed,
+        attachmentWaitTimedOut,
+        inputOnlyAttachments,
+        userTurnVerified,
+      };
     };
 
     let responseAttempt = 0;
     let currentPrompt = promptText;
     let currentAttachments = attachments;
+    const attachmentMonitorHosts = buildAllowedAttachmentHosts(config.url ?? PERPLEXITY_URL);
     while (true) {
       let baselineTurns: number | null = null;
       let baselineAssistantText: string | null = null;
       let usedPrompt = currentPrompt;
       let usedAttachments = currentAttachments;
+      let attachmentUiConfirmed = true;
+      let attachmentWaitTimedOut = false;
+      let inputOnlyAttachments = false;
+      let userTurnVerified: boolean | null = null;
+      let attachmentNetworkResult: AttachmentNetworkResult | null = null;
+      let attachmentNetworkMonitor: ReturnType<typeof startAttachmentNetworkMonitor> | null = null;
+      const startNetworkMonitor = () => {
+        if (!Network || usedAttachments.length === 0) return;
+        attachmentNetworkMonitor = startAttachmentNetworkMonitor(Network, {
+          attachmentNames: usedAttachments.map((entry) => entry.path),
+          logger,
+          allowedHosts: attachmentMonitorHosts,
+        });
+      };
+      const stopNetworkMonitor = async () => {
+        if (!attachmentNetworkMonitor) return null;
+        try {
+          return await attachmentNetworkMonitor.stop();
+        } catch (error) {
+          if (logger.verbose) {
+            logger(
+              `Attachment network monitor stop failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          return null;
+        } finally {
+          attachmentNetworkMonitor = null;
+        }
+      };
+      let attachmentUiConfirmed = true;
+      let attachmentWaitTimedOut = false;
+      let inputOnlyAttachments = false;
+      let userTurnVerified: boolean | null = null;
+      let attachmentNetworkResult: AttachmentNetworkResult | null = null;
+      let attachmentNetworkMonitor: ReturnType<typeof startAttachmentNetworkMonitor> | null = null;
+      const startNetworkMonitor = () => {
+        if (!Network || usedAttachments.length === 0) return;
+        attachmentNetworkMonitor = startAttachmentNetworkMonitor(Network, {
+          attachmentNames: usedAttachments.map((entry) => entry.path),
+          logger,
+          allowedHosts: attachmentMonitorHosts,
+        });
+      };
+      const stopNetworkMonitor = async () => {
+        if (!attachmentNetworkMonitor) return null;
+        try {
+          return await attachmentNetworkMonitor.stop();
+        } catch (error) {
+          if (logger.verbose) {
+            logger(
+              `Attachment network monitor stop failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          return null;
+        } finally {
+          attachmentNetworkMonitor = null;
+        }
+      };
       try {
+        startNetworkMonitor();
         const submission = await raceWithDisconnect(submitOnce(usedPrompt, usedAttachments));
         if (submission.noSubmit) {
+          attachmentNetworkResult = await stopNetworkMonitor();
           runStatus = 'complete';
           answerText = '[no-submit] Prompt filled; not submitted.';
           answerMarkdown = answerText;
@@ -665,7 +783,13 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         }
         baselineTurns = submission.baselineTurns;
         baselineAssistantText = submission.baselineAssistantText;
+        attachmentUiConfirmed = submission.attachmentUiConfirmed;
+        attachmentWaitTimedOut = submission.attachmentWaitTimedOut;
+        inputOnlyAttachments = submission.inputOnlyAttachments;
+        userTurnVerified = submission.userTurnVerified;
       } catch (error) {
+        await stopNetworkMonitor();
+        attachmentNetworkResult = null;
         const isPromptTooLarge =
           error instanceof BrowserAutomationError &&
           (error.details as { code?: string } | undefined)?.code === 'prompt-too-large';
@@ -676,8 +800,10 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
           usedPrompt = fallbackSubmission.prompt;
           usedAttachments = fallbackSubmission.attachments;
+          startNetworkMonitor();
           const submission = await raceWithDisconnect(submitOnce(usedPrompt, usedAttachments));
           if (submission.noSubmit) {
+            attachmentNetworkResult = await stopNetworkMonitor();
             runStatus = 'complete';
             answerText = '[no-submit] Prompt filled; not submitted.';
             answerMarkdown = answerText;
@@ -702,7 +828,12 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           }
           baselineTurns = submission.baselineTurns;
           baselineAssistantText = submission.baselineAssistantText;
+          attachmentUiConfirmed = submission.attachmentUiConfirmed;
+          attachmentWaitTimedOut = submission.attachmentWaitTimedOut;
+          inputOnlyAttachments = submission.inputOnlyAttachments;
+          userTurnVerified = submission.userTurnVerified;
         } else {
+          await stopNetworkMonitor();
           throw error;
         }
       }
@@ -895,11 +1026,17 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         throw new Error('Chrome disconnected before completion');
       }
       stopThinkingMonitor?.();
+      attachmentNetworkResult = await stopNetworkMonitor();
       const retryPlan = planAttachmentResponseRetry({
         answerText,
         attachments: usedAttachments,
         attempt: responseAttempt,
         maxAttempts: MAX_RESPONSE_PARSE_RETRIES,
+        networkResult: attachmentNetworkResult,
+        uiConfirmed: attachmentUiConfirmed,
+        uploadTimedOut: attachmentWaitTimedOut,
+        inputOnly: inputOnlyAttachments,
+        userTurnVerified,
       });
       if (retryPlan.shouldRetry) {
         const failedLabels = retryPlan.failedAttachments.map((entry) => path.basename(entry.path)).join(', ');
@@ -1342,13 +1479,24 @@ async function runRemoteBrowserMode(
     const submitOnce = async (
       prompt: string,
       submissionAttachments: BrowserAttachment[],
-    ): Promise<{ baselineTurns: number | null; baselineAssistantText: string | null; noSubmit: boolean }> => {
+    ): Promise<{
+      baselineTurns: number | null;
+      baselineAssistantText: string | null;
+      noSubmit: boolean;
+      attachmentUiConfirmed: boolean;
+      attachmentWaitTimedOut: boolean;
+      inputOnlyAttachments: boolean;
+      userTurnVerified: boolean | null;
+    }> => {
       await dismissBlockingUi(Runtime, logger).catch(() => false);
       const baselineSnapshot = await readAssistantSnapshot(Runtime).catch(() => null);
       const baselineAssistantText =
         typeof baselineSnapshot?.text === 'string' ? baselineSnapshot.text.trim() : '';
       const attachmentNames = submissionAttachments.map((a) => path.basename(a.path));
       let attachmentWaitTimedOut = false;
+      let attachmentUiConfirmed = submissionAttachments.length === 0;
+      let inputOnlyAttachments = false;
+      let userTurnVerified: boolean | null = null;
       if (submissionAttachments.length > 0) {
         if (!DOM) {
           throw new Error('Chrome DOM domain unavailable while uploading attachments.');
@@ -1385,6 +1533,7 @@ async function runRemoteBrowserMode(
               }
               if (/Attachments did not finish uploading before timeout/i.test(message)) {
                 attachmentWaitTimedOut = true;
+                attachmentUiConfirmed = false;
                 logger(
                   `[browser] Attachment upload timed out after ${Math.round(waitBudget / 1000)}s; continuing without confirmation.`,
                 );
@@ -1422,27 +1571,49 @@ async function runRemoteBrowserMode(
       );
       if (config.noSubmit) {
         logger('No-submit mode: prompt filled; skipping send + response wait.');
-        return { baselineTurns, baselineAssistantText, noSubmit: true };
+        return {
+          baselineTurns,
+          baselineAssistantText,
+          noSubmit: true,
+          attachmentUiConfirmed,
+          attachmentWaitTimedOut,
+          inputOnlyAttachments,
+          userTurnVerified,
+        };
       }
       if (typeof committedTurns === 'number' && Number.isFinite(committedTurns)) {
         if (baselineTurns === null || committedTurns > baselineTurns) {
           baselineTurns = Math.max(0, committedTurns - 1);
         }
       }
-      return { baselineTurns, baselineAssistantText, noSubmit: false };
+      if (submissionAttachments.length > 0 && attachmentUiConfirmed && attachmentWaitTimedOut) {
+        attachmentUiConfirmed = false;
+      }
+      return {
+        baselineTurns,
+        baselineAssistantText,
+        noSubmit: false,
+        attachmentUiConfirmed,
+        attachmentWaitTimedOut,
+        inputOnlyAttachments,
+        userTurnVerified,
+      };
     };
 
     let responseAttempt = 0;
     let currentPrompt = promptText;
     let currentAttachments = attachments;
+    const attachmentMonitorHosts = buildAllowedAttachmentHosts(config.url ?? PERPLEXITY_URL);
     while (true) {
       let baselineTurns: number | null = null;
       let baselineAssistantText: string | null = null;
       let usedPrompt = currentPrompt;
       let usedAttachments = currentAttachments;
       try {
+        startNetworkMonitor();
         const submission = await submitOnce(usedPrompt, usedAttachments);
         if (submission.noSubmit) {
+          attachmentNetworkResult = await stopNetworkMonitor();
           answerText = '[no-submit] Prompt filled; not submitted.';
           answerMarkdown = answerText;
           const durationMs = Date.now() - startedAt;
@@ -1466,7 +1637,12 @@ async function runRemoteBrowserMode(
         }
         baselineTurns = submission.baselineTurns;
         baselineAssistantText = submission.baselineAssistantText;
+        attachmentUiConfirmed = submission.attachmentUiConfirmed;
+        attachmentWaitTimedOut = submission.attachmentWaitTimedOut;
+        inputOnlyAttachments = submission.inputOnlyAttachments;
+        userTurnVerified = submission.userTurnVerified;
       } catch (error) {
+        await stopNetworkMonitor();
         const isPromptTooLarge =
           error instanceof BrowserAutomationError &&
           (error.details as { code?: string } | undefined)?.code === 'prompt-too-large';
@@ -1476,8 +1652,10 @@ async function runRemoteBrowserMode(
           await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
           usedPrompt = options.fallbackSubmission.prompt;
           usedAttachments = options.fallbackSubmission.attachments;
+          startNetworkMonitor();
           const submission = await submitOnce(usedPrompt, usedAttachments);
           if (submission.noSubmit) {
+            attachmentNetworkResult = await stopNetworkMonitor();
             answerText = '[no-submit] Prompt filled; not submitted.';
             answerMarkdown = answerText;
             const durationMs = Date.now() - startedAt;
@@ -1501,7 +1679,12 @@ async function runRemoteBrowserMode(
           }
           baselineTurns = submission.baselineTurns;
           baselineAssistantText = submission.baselineAssistantText;
+          attachmentUiConfirmed = submission.attachmentUiConfirmed;
+          attachmentWaitTimedOut = submission.attachmentWaitTimedOut;
+          inputOnlyAttachments = submission.inputOnlyAttachments;
+          userTurnVerified = submission.userTurnVerified;
         } else {
+          await stopNetworkMonitor();
           throw error;
         }
       }
@@ -1648,19 +1831,25 @@ async function runRemoteBrowserMode(
           }
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
-        if (bestText) {
-          logger('Recovered assistant response after detecting prompt echo');
-          answerText = bestText;
-          answerMarkdown = bestText;
-        }
+      if (bestText) {
+        logger('Recovered assistant response after detecting prompt echo');
+        answerText = bestText;
+        answerMarkdown = bestText;
       }
-      stopThinkingMonitor?.();
-      const retryPlan = planAttachmentResponseRetry({
-        answerText,
-        attachments: usedAttachments,
-        attempt: responseAttempt,
-        maxAttempts: MAX_RESPONSE_PARSE_RETRIES,
-      });
+    }
+    stopThinkingMonitor?.();
+    attachmentNetworkResult = await stopNetworkMonitor();
+    const retryPlan = planAttachmentResponseRetry({
+      answerText,
+      attachments: usedAttachments,
+      attempt: responseAttempt,
+      maxAttempts: MAX_RESPONSE_PARSE_RETRIES,
+      networkResult: attachmentNetworkResult,
+      uiConfirmed: attachmentUiConfirmed,
+      uploadTimedOut: attachmentWaitTimedOut,
+      inputOnly: inputOnlyAttachments,
+      userTurnVerified,
+    });
       if (retryPlan.shouldRetry) {
         const failedLabels = retryPlan.failedAttachments.map((entry) => path.basename(entry.path)).join(', ');
         logger(

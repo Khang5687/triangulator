@@ -52,6 +52,7 @@ describe('planAttachmentResponseRetry', () => {
       attachments,
       attempt: 0,
       maxAttempts: 1,
+      uiConfirmed: false,
     });
     expect(plan.shouldRetry).toBe(true);
     expect(plan.failedAttachments.map((entry) => entry.displayPath)).toEqual(['large.pdf']);
@@ -64,6 +65,7 @@ describe('planAttachmentResponseRetry', () => {
       attachments,
       attempt: 1,
       maxAttempts: 1,
+      uiConfirmed: false,
     });
     expect(plan.shouldRetry).toBe(false);
   });
@@ -76,5 +78,36 @@ describe('planAttachmentResponseRetry', () => {
       maxAttempts: 1,
     });
     expect(plan.shouldRetry).toBe(false);
+  });
+
+  test('skips parse-failure retry when UI is healthy and no network failure', () => {
+    const text = 'Failed to parse file large.pdf.';
+    const plan = planAttachmentResponseRetry({
+      answerText: text,
+      attachments,
+      attempt: 0,
+      maxAttempts: 1,
+      uiConfirmed: true,
+      uploadTimedOut: false,
+      inputOnly: false,
+      userTurnVerified: true,
+    });
+    expect(plan.shouldRetry).toBe(false);
+  });
+
+  test('retries when network monitor reports failures even without parse error', () => {
+    const plan = planAttachmentResponseRetry({
+      answerText: 'Everything looks good.',
+      attachments,
+      attempt: 0,
+      maxAttempts: 1,
+      networkResult: {
+        failed: ['small.txt'],
+        ambiguous: false,
+        failures: [{ requestId: '1', url: 'https://perplexity.ai/upload', reason: 'http-500' }],
+      },
+    });
+    expect(plan.shouldRetry).toBe(true);
+    expect(plan.failedAttachments.map((entry) => entry.displayPath)).toEqual(['small.txt']);
   });
 });

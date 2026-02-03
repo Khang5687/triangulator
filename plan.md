@@ -9,6 +9,23 @@ Adapt Triangulator to Perplexity-only browser automation and Spaces. Remove Chat
 - Remaining: one-time local copy `~/.oracle/config.json` -> `~/.triangulator/config.json`; run Perplexity smoke tests; finalize attachment selectors.
 - Note: internal module names (e.g. `src/oracle`) kept to minimize upstream merge conflicts; user-facing strings are Triangulator.
 
+## 0.2) Attachment retry reliability plan (2026-02-03)
+- Goal: avoid false-positive attachment retries while still retrying on genuine parse/upload failures.
+- Strategy: multi-signal gating (Network + UI + response text).
+  - Network: monitor CDP Network responses for upload/parse errors.
+  - UI: confirm attachment chips/counts and detect toast/error messages.
+  - Response: parse assistant text for explicit file parse errors.
+- Retry only when:
+  - network monitor reports failures (matched or ambiguous), OR
+  - response parse failure + UI uncertainty (timed-out upload, input-only, or no UI confirmation).
+
+## 0.3) Execution steps (this change)
+1) Track attachment UI confirmation state during upload and after send.
+2) Start per-attempt network monitor; stop after answer capture.
+3) Feed network/UI signals into response-retry planner.
+4) Update tests for retry planner to cover new gating.
+5) Run unit tests for attachment retry + config/controls.
+
 ## 1) Current architecture map (legacy ChatGPT path to replace)
 - Orchestration: `src/browser/index.ts` (runBrowserMode/runRemoteBrowserMode)
 - Config/defaults: `src/browser/config.ts`, `src/browser/types.ts`, `src/cli/browserConfig.ts`, `src/cli/browserDefaults.ts`

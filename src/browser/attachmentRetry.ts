@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { BrowserAttachment } from './types.js';
+import type { AttachmentNetworkResult } from './attachmentNetwork.js';
 
 export interface AttachmentParseFailure {
   failed: string[];
@@ -78,8 +79,23 @@ export function planAttachmentResponseRetry(args: {
   attachments: BrowserAttachment[];
   attempt: number;
   maxAttempts: number;
+  networkResult?: AttachmentNetworkResult | null;
+  uiConfirmed?: boolean;
+  uploadTimedOut?: boolean;
+  inputOnly?: boolean;
+  userTurnVerified?: boolean | null;
 }): AttachmentRetryPlan {
-  const { answerText, attachments, attempt, maxAttempts } = args;
+  const {
+    answerText,
+    attachments,
+    attempt,
+    maxAttempts,
+    networkResult,
+    uiConfirmed,
+    uploadTimedOut,
+    inputOnly,
+    userTurnVerified,
+  } = args;
   if (attempt >= maxAttempts) {
     return { shouldRetry: false, failedAttachments: [] };
   }
@@ -87,21 +103,46 @@ export function planAttachmentResponseRetry(args: {
     return { shouldRetry: false, failedAttachments: [] };
   }
   const attachmentNames = normalizeAttachmentNames(attachments);
-  const failure = detectAttachmentParseFailures(answerText, attachmentNames);
-  if (!failure) {
+  const networkFailures = networkResult?.failures?.length ? networkResult : null;
+  const parseFailure = detectAttachmentParseFailures(answerText, attachmentNames);
+  if (!parseFailure && !networkFailures) {
     return { shouldRetry: false, failedAttachments: [] };
   }
-  const failedSet = new Set(failure.failed.map((name) => name.toLowerCase()));
-  const failedAttachments = failure.ambiguous
-    ? attachments
-    : attachments.filter((attachment) => failedSet.has(path.basename(attachment.path).toLowerCase()));
+
+  const uiLooksHealthy =
+    uiConfirmed !== false &&
+    uploadTimedOut !== true &&
+    inputOnly !== true &&
+    userTurnVerified !== false;
+
+  if (parseFailure && !networkFailures && uiLooksHealthy) {
+    return { shouldRetry: false, failedAttachments: [], reason: 'parse-failure-ui-ok' };
+  }
+
+  const failedFromNetwork = networkFailures?.failed ?? [];
+  const failedSet = new Set(parseFailure?.failed.map((name) => name.toLowerCase()) ?? []);
+  const failedAttachments =
+    failedFromNetwork.length > 0
+      ? attachments.filter((attachment) =>
+          failedFromNetwork.some((name) => name.toLowerCase() === path.basename(attachment.path).toLowerCase()),
+        )
+      : parseFailure?.ambiguous || networkFailures?.ambiguous
+        ? attachments
+        : attachments.filter((attachment) => failedSet.has(path.basename(attachment.path).toLowerCase()));
   if (failedAttachments.length === 0) {
     return { shouldRetry: false, failedAttachments: [], reason: 'parse-failure-no-match' };
   }
+  const reason = networkFailures
+    ? networkFailures.ambiguous
+      ? 'network-failure-ambiguous'
+      : 'network-failure'
+    : parseFailure?.ambiguous
+      ? 'parse-failure-ambiguous'
+      : 'parse-failure';
   return {
     shouldRetry: true,
     failedAttachments,
-    reason: failure.ambiguous ? 'parse-failure-ambiguous' : 'parse-failure',
+    reason,
   };
 }
 
