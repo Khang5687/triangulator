@@ -368,6 +368,7 @@ function buildRecencySelectionExpression(recency: PerplexityRecency): string {
         const type = (node.getAttribute('type') || '').toLowerCase();
         if (type === 'submit') return false;
         const label = normalize(node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '');
+        if (!label.includes('source')) return false;
         if (label.includes('send') || label.includes('submit')) return false;
         return true;
       });
@@ -481,11 +482,21 @@ function buildSourcesSelectionExpression(targets: string[]): string {
       dispatchClickSequence(node);
       await new Promise((resolve) => setTimeout(resolve, 200));
       let menu = findMenu();
+      const isOpen = () => {
+        if (!node || !(node instanceof HTMLElement)) return false;
+        const ariaExpanded = node.getAttribute('aria-expanded');
+        const dataState = (node.getAttribute('data-state') || '').toLowerCase();
+        return ariaExpanded === 'true' || dataState === 'open';
+      };
       if (!menu) {
         const deadline = performance.now() + 1200;
         while (!menu && performance.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, 100));
           menu = findMenu();
+          if (!menu && isOpen()) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            menu = findMenu();
+          }
         }
       }
       if (menuMatchesTargets(menu)) return menu;

@@ -392,6 +392,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     if (config.perplexityRecency) {
       await raceWithDisconnect(ensurePerplexityRecency(Runtime, config.perplexityRecency, logger));
     }
+    await raceWithDisconnect(ensurePerplexityMode(Runtime, perplexityMode, logger));
     const captureRuntimeSnapshot = async () => {
       try {
         if (client?.Target?.getTargetInfo) {
@@ -1392,6 +1393,7 @@ async function runRemoteBrowserMode(
     if (config.perplexityRecency) {
       await ensurePerplexityRecency(Runtime, config.perplexityRecency, logger);
     }
+    await ensurePerplexityMode(Runtime, perplexityMode, logger);
     try {
       const { result } = await Runtime.evaluate({
         expression: 'location.href',
