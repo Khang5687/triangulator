@@ -620,6 +620,9 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
             }
             throw error;
           }
+          if (isPerplexity) {
+            await ensurePerplexityMode(Runtime, perplexityMode, logger);
+          }
           break;
         }
       }
@@ -638,6 +641,9 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         prompt,
         logger,
       );
+      if (isPerplexity) {
+        await ensurePerplexityMode(Runtime, perplexityMode, logger);
+      }
       if (config.noSubmit) {
         logger('No-submit mode: prompt filled; skipping send + response wait.');
         return {
@@ -1379,6 +1385,7 @@ async function runRemoteBrowserMode(
     await dismissBlockingUi(Runtime, logger).catch(() => false);
     logger(`Prompt textarea ready (initial focus, ${promptText.length.toLocaleString()} chars queued)`);
     const perplexityMode = config.perplexityMode ?? 'search';
+    const isPerplexity = (config.url ?? '').includes('perplexity.ai');
     const isSearchMode = perplexityMode === 'search';
     await ensurePerplexityMode(Runtime, perplexityMode, logger);
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
@@ -1525,6 +1532,9 @@ async function runRemoteBrowserMode(
             }
             throw error;
           }
+          if (isPerplexity) {
+            await ensurePerplexityMode(Runtime, perplexityMode, logger);
+          }
           break;
         }
       }
@@ -1542,6 +1552,9 @@ async function runRemoteBrowserMode(
         prompt,
         logger,
       );
+      if (isPerplexity) {
+        await ensurePerplexityMode(Runtime, perplexityMode, logger);
+      }
       if (config.noSubmit) {
         logger('No-submit mode: prompt filled; skipping send + response wait.');
         return {
