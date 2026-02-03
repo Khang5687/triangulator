@@ -351,9 +351,13 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     }
     logger(`Prompt textarea ready (initial focus, ${promptText.length.toLocaleString()} chars queued)`);
     const perplexityMode = config.perplexityMode ?? 'search';
+    const isSearchMode = perplexityMode === 'search';
     await raceWithDisconnect(ensurePerplexityMode(Runtime, perplexityMode, logger));
     await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
-    if (config.perplexitySources || config.perplexityConnectors) {
+    if (!isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
+      logger(`Perplexity sources/connectors ignored for mode=${perplexityMode} (search only).`);
+    }
+    if (isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
       await raceWithDisconnect(
         ensurePerplexitySources(Runtime, logger, {
           sources: config.perplexitySources ?? undefined,
@@ -362,7 +366,10 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         }),
       );
     }
-    if (config.perplexityRecency) {
+    if (!isSearchMode && config.perplexityRecency) {
+      logger(`Perplexity recency ignored for mode=${perplexityMode} (search only).`);
+    }
+    if (isSearchMode && config.perplexityRecency) {
       await raceWithDisconnect(ensurePerplexityRecency(Runtime, config.perplexityRecency, logger));
     }
     const captureRuntimeSnapshot = async () => {
@@ -435,7 +442,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     };
     await captureRuntimeSnapshot();
     const modelStrategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY;
-    const canSelectModel = perplexityMode === 'search';
+    const canSelectModel = isSearchMode;
     if (config.desiredModel && modelStrategy !== 'ignore' && canSelectModel) {
       await raceWithDisconnect(
         withRetries(
@@ -1210,16 +1217,23 @@ async function runRemoteBrowserMode(
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
     logger(`Prompt textarea ready (initial focus, ${promptText.length.toLocaleString()} chars queued)`);
     const perplexityMode = config.perplexityMode ?? 'search';
+    const isSearchMode = perplexityMode === 'search';
     await ensurePerplexityMode(Runtime, perplexityMode, logger);
     await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
-    if (config.perplexitySources || config.perplexityConnectors) {
+    if (!isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
+      logger(`Perplexity sources/connectors ignored for mode=${perplexityMode} (search only).`);
+    }
+    if (isSearchMode && (config.perplexitySources || config.perplexityConnectors)) {
       await ensurePerplexitySources(Runtime, logger, {
         sources: config.perplexitySources ?? undefined,
         connectors: config.perplexityConnectors ?? undefined,
         skipFailedSources: config.skipFailedSources,
       });
     }
-    if (config.perplexityRecency) {
+    if (!isSearchMode && config.perplexityRecency) {
+      logger(`Perplexity recency ignored for mode=${perplexityMode} (search only).`);
+    }
+    if (isSearchMode && config.perplexityRecency) {
       await ensurePerplexityRecency(Runtime, config.perplexityRecency, logger);
     }
     try {
@@ -1236,7 +1250,7 @@ async function runRemoteBrowserMode(
     }
 
     const modelStrategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY;
-    const canSelectModel = perplexityMode === 'search';
+    const canSelectModel = isSearchMode;
     if (config.desiredModel && modelStrategy !== 'ignore' && canSelectModel) {
       await withRetries(
         () =>

@@ -250,9 +250,17 @@ function buildModeSelectionExpression(mode: PerplexityMode): string {
       button.click();
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
-    const after = currentActiveLabel();
-    const normalizedAfter = normalize(after || '');
-    const matched = desired.some((entry) => normalizedAfter.includes(entry));
+    let after = currentActiveLabel();
+    let normalizedAfter = normalize(after || '');
+    let matched = desired.some((entry) => normalizedAfter.includes(entry));
+    if (!matched) {
+      return { status: 'missing', debug: { url: location.href, labels: desired, active: after } };
+    }
+    // Guard: Perplexity can re-render after mode click; wait briefly and re-validate.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    after = currentActiveLabel();
+    normalizedAfter = normalize(after || '');
+    matched = desired.some((entry) => normalizedAfter.includes(entry));
     if (!matched) {
       return { status: 'missing', debug: { url: location.href, labels: desired, active: after } };
     }
